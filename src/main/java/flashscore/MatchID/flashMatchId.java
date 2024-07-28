@@ -14,11 +14,11 @@ import java.util.List;
 
 public class flashMatchId {
 
-    private static final String ACCEPT_COOKIES_BUTTON_XPATH = "//*[@id='onetrust-accept-btn-handler']";
-    private static final String SHOW_MORE_MATCHES_BUTTON_XPATH = "//a[text()='Show more matches']";
-    private static final String MATCH_DETAIL_XPATH = "//*[@title='Click for match detail!']";
-    private static final String FILE_NAME = "matchIds.txt";
-    private static final String MATCH_ID_PREFIX = "g_1_";
+    public static final String ACCEPT_COOKIES_BUTTON_XPATH = "//*[@id='onetrust-accept-btn-handler']";
+    public static final String SHOW_MORE_MATCHES_BUTTON_XPATH = "//a[text()='Show more matches']";
+    public static final String MATCH_DETAIL_XPATH = "//*[@title='Click for match detail!']";
+    public static final String FILE_NAME = "matchIds.txt";
+    public static final String MATCH_ID_PREFIX = "g_1_";
 
 
 
@@ -50,7 +50,7 @@ public class flashMatchId {
         writeMatchIdsToFile(matchIds);
     }
 
-    private static void acceptCookies(WebDriver driver) {
+    public static void acceptCookies(WebDriver driver) {
         try {
             WebElement acceptButton = driver.findElement(By.xpath(ACCEPT_COOKIES_BUTTON_XPATH));
             acceptButton.click();
@@ -60,7 +60,7 @@ public class flashMatchId {
         }
     }
 
-    private static void showMoreMatches(WebDriver driver) throws InterruptedException {
+    public static void showMoreMatches(WebDriver driver) throws InterruptedException {
         boolean moreMatches = true;
         while (moreMatches) {
             try {
