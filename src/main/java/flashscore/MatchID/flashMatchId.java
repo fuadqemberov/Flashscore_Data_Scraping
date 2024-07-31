@@ -97,4 +97,34 @@ public class flashMatchId {
         return matches;
     }
 
+    private static void writeMatchIdsToFile2(List<String> matchIds) {
+        try (FileWriter writer = new FileWriter(FILE_NAME, true)) {
+            for (String matchId : matchIds) {
+                writer.write(matchId + " ");
+            }
+        } catch (IOException e) {
+            System.out.println("Error writing to file: " + e.getMessage());
+        }
+    }
+
+    public static List<String> getMatchIdsFromFile2(String fileName) {
+        List<String> matches = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(fileName))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                // Boşluk ile ayrılmış değerleri ayır
+                String[] matchIds = line.split(" ");
+                for (String matchId : matchIds) {
+                    if (!matchId.trim().isEmpty()) { // Boş değerleri atla
+                        matches.add(matchId);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Error reading file: " + e.getMessage());
+        }
+
+        return matches;
+    }
+
 }
