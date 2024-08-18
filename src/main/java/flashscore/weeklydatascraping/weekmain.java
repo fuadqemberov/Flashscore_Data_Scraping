@@ -9,39 +9,41 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static flashscore.Data.flashDataScraper.getOddsDataFromJson;
+import static flashscore.Data.flashDataScraper.*;
 import static flashscore.MatchID.flashMatchId.*;
-import static flashscore.Util.flashUtill.exceleYazdir;
-import static flashscore.Util.flashUtill.getChromeDriver;
+import static flashscore.Util.flashUtill.*;
 
 public class weekmain {
     public static List<String> matchIddnew = new ArrayList<>();
+
     public static void main(String[] args) throws InterruptedException, IOException {
 
 
         WebDriver driver = getChromeDriver();
-        driver.get("https://www.flashscore.com/");
-        acceptCookies(driver);
-        Thread.sleep(2000);
-        goTo7DayBefore(driver);
-        for(int i =1;i<=7;i++){
-            getMathcIdFromSite(driver);
-            if(i!=7){
-             goToNextDay(driver);
+        for (int i = 1; i <= 2; i++) {
+            try {
+                goTo7DayBefore(driver, i);
+                getMathcIdFromSite(driver);
+            } catch (Exception ee) {
+                continue;
             }
         }
-        writeMatchIdsToFile2(matchIddnew);
-        for(String matchId:matchIddnew){
-            getOddsDataFromJson(matchId);
+
+
+        for (String matchId : matchIddnew) {
+            try {
+                getMatchDataFromSite(driver, matchId);
+            } catch (Exception exception) {
+                continue;
+            }
         }
-        exceleYazdir();
-    }
-    private static void goToNextDay(WebDriver driver) throws InterruptedException {
-        driver.findElement(By.xpath("//*[@id=\"live-table\"]/div[1]/div[2]/div/button[2]")).click();
-        Thread.sleep(1000);
+        driver.quit();
+        exceleYazdir2();
+
     }
 
-    private static void getMathcIdFromSite(WebDriver driver){
+
+    private static void getMathcIdFromSite(WebDriver driver) {
         List<WebElement> elementList = driver.findElements(By.xpath(MATCH_DETAIL_XPATH));
         for (WebElement element : elementList) {
             String link = element.getAttribute("aria-describedby");
@@ -62,10 +64,11 @@ public class weekmain {
         }
     }
 
-    private static void goTo7DayBefore(WebDriver driver)  throws InterruptedException{
+    private static void goTo7DayBefore(WebDriver driver, int i) throws InterruptedException {
+        driver.get("https://www.flashscore.com/");
         driver.findElement(By.xpath("//*[@id=\"calendarMenu\"]")).click();
         Thread.sleep(1000);
-        driver.findElement(By.xpath("//*[@id=\"live-table\"]/div[1]/div[2]/div/ul/li[1]")).click();
+        driver.findElement(By.xpath("//*[@id=\"live-table\"]/div[1]/div[2]/div/ul/li[" + i + "]")).click();
         acceptCookies(driver);
         clickAllElements(driver, "//span[contains(text(), 'display matches (')]");
         Thread.sleep(1000);
@@ -82,7 +85,12 @@ public class weekmain {
             }
 
             for (WebElement element : elements) {
-                element.click();
+                try {
+                    element.click();
+                } catch (Exception ex) {
+                    continue;
+                }
+
 
                 // Optional: Add a short wait to avoid rapid clicking
                 try {
@@ -102,5 +110,5 @@ public class weekmain {
         }
 
     }
-
 }
+

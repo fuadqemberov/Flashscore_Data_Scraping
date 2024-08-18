@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import static flashscore.Data.flashDataScraper.datas;
+import static flashscore.Data.flashDataScraper.macthes;
 
 
 public class flashUtill {
@@ -127,6 +128,41 @@ public class flashUtill {
 
         // Save the workbook
         try (FileOutputStream fileOut = new FileOutputStream("src\\bet365.xlsx")) {
+            workbook.write(fileOut);
+            fileOut.close();
+        }
+        catch (Exception ex){
+            System.out.println(ex.getLocalizedMessage());
+        }
+
+
+    }
+    public static void exceleYazdir2() {
+
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("Matches");
+
+        // Create a header row
+        Row headerRow = sheet.createRow(0);
+        headerRow.createCell(0).setCellValue("Home1");
+        headerRow.createCell(1).setCellValue("Home2");
+        headerRow.createCell(2).setCellValue("Away1 ");
+        headerRow.createCell(3).setCellValue("Away2");
+        headerRow.createCell(4).setCellValue("result FT");
+        headerRow.createCell(5).setCellValue("result HT");
+
+
+
+
+        for (int i = 0; i < datas.size(); i++) {
+            Row row = sheet.createRow(i + 1);
+            for(int j=0;j<6;j++){
+                row.createCell(j).setCellValue(datas.get(i).get(j));
+            }
+        }
+
+        // Save the workbook
+        try (FileOutputStream fileOut = new FileOutputStream("src\\lasmathes.xlsx")) {
             workbook.write(fileOut);
             fileOut.close();
         }
