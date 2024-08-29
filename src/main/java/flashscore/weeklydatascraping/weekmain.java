@@ -16,7 +16,7 @@ import static flashscore.Util.flashUtill.*;
 public class weekmain {
     public static List<String> matchIddnew = new ArrayList<>();
 
-    public static void main(String[] args) throws InterruptedException, IOException {
+    public static void main(String[] args) {
 
 
         WebDriver driver = getChromeDriver();
@@ -28,9 +28,7 @@ public class weekmain {
                 continue;
             }
         }
-
-
-        for (String matchId : matchIddnew) {
+      for (String matchId : matchIddnew) {
             try {
                 getMatchDataFromSite(driver, matchId);
             } catch (Exception exception) {
@@ -39,7 +37,6 @@ public class weekmain {
         }
         driver.quit();
         exceleYazdir2();
-
     }
 
 

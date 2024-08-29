@@ -146,17 +146,19 @@ public class flashUtill {
         Row headerRow = sheet.createRow(0);
         headerRow.createCell(0).setCellValue("Home1");
         headerRow.createCell(1).setCellValue("Home2");
-        headerRow.createCell(2).setCellValue("Away1 ");
-        headerRow.createCell(3).setCellValue("Away2");
-        headerRow.createCell(4).setCellValue("result FT");
-        headerRow.createCell(5).setCellValue("result HT");
+        headerRow.createCell(2).setCellValue("Home3");
+        headerRow.createCell(3).setCellValue("Away1 ");
+        headerRow.createCell(4).setCellValue("Away2");
+        headerRow.createCell(5).setCellValue("Away3");
+        headerRow.createCell(6).setCellValue("result FT");
+        headerRow.createCell(7).setCellValue("result HT");
 
 
 
 
         for (int i = 0; i < datas.size(); i++) {
             Row row = sheet.createRow(i + 1);
-            for(int j=0;j<6;j++){
+            for(int j=0;j<8;j++){
                 row.createCell(j).setCellValue(datas.get(i).get(j));
             }
         }

@@ -41,82 +41,22 @@ public class flashDataScraper {
         getTeamMatches(driver, linkPart);
     }
 
-    public static void getFirstTeamMatches(WebDriver driver, String link) throws InterruptedException {
-        String link2 = "https://www.flashscore.com/match/" + link + "/#/h2h/overall";
-        driver.get(link2);
-        Thread.sleep(1000);
-        acceptCookies(driver);
-        for (int i = 2; i < 4; i++) {
-            String xpath = "//*[@id=\"detail\"]/div[7]/div[2]/div[1]/div[2]/div[" + i + "]";
-
-
-            WebElement element = driver.findElement(By.xpath(xpath));
-            String score = element.findElement(By.xpath(xpath + "/span[5]")).getText().replaceAll("[^\\d]", "").trim();
-
-            String homeTeam = score.charAt(0) + " - " + score.charAt(1);
-            oneRowData.add(homeTeam);
-
-
-        }
-        String result = driver.findElement(By.xpath("//*[@id=\"detail\"]/div[4]/div[3]/div/div[1]")).getText();
-        oneRowData.add(result);
-
-        driver.findElement(By.xpath("//*[@id=\"detail\"]/div[6]/div/a[1]/button")).click();
-        Thread.sleep(500);
-        String ht = driver.findElement(By.xpath("//*[@id=\"detail\"]/div[9]/div/div[1]/div[2]")).getText();
-        oneRowData.add(ht);
-
-        temp = new ArrayList<>(oneRowData);
-        datas.add(temp);
-        oneRowData.clear();
-    }
-
-    public static void getSecondTeamMatches(WebDriver driver, String link) throws InterruptedException {
-        String link2 = "https://www.flashscore.com/match/" + link + "/#/h2h/overall";
-        driver.get(link2);
-        Thread.sleep(1000);
-        acceptCookies(driver);
-        for (int i = 2; i < 4; i++) {
-            String xpath = "//*[@id=\"detail\"]/div[7]/div[2]/div[2]/div[2]/div[" + i + "]";
-
-
-            WebElement element = driver.findElement(By.xpath(xpath));
-            String score = element.findElement(By.xpath(xpath + "/span[5]")).getText().replaceAll("[^\\d]", "").trim();
-
-            String homeTeam = score.charAt(0) + " - " + score.charAt(1);
-            oneRowData.add(homeTeam);
-
-
-        }
-        String result = driver.findElement(By.xpath("//*[@id=\"detail\"]/div[4]/div[3]/div/div[1]")).getText();
-        oneRowData.add(result);
-
-        driver.findElement(By.xpath("//*[@id=\"detail\"]/div[6]/div/a[1]/button")).click();
-        Thread.sleep(500);
-        String ht = driver.findElement(By.xpath("//*[@id=\"detail\"]/div[9]/div/div[1]/div[2]")).getText();
-        oneRowData.add(ht);
-
-        temp = new ArrayList<>(oneRowData);
-        datas.add(temp);
-        oneRowData.clear();
-    }
-
     public static void getTeamMatches(WebDriver driver, String link) throws InterruptedException {
         String link2 = "https://www.flashscore.com/match/" + link + "/#/h2h/overall";
         driver.get(link2);
         Thread.sleep(1000);
         acceptCookies(driver);
-        for(int j = 1;j<3;j++){
-            for (int i = 2; i < 4; i++) {
-                String xpath = "//*[@id=\"detail\"]/div[7]/div[2]/div["+j+"]/div[2]/div[" + i + "]";
+        for (int j = 1; j < 3; j++) {
+            for (int i = 2; i < 5; i++) {
+                String xpath = "//*[@id=\"detail\"]/div[7]/div[2]/div[" + j + "]/div[2]/div[" + i + "]";
 
                 WebElement element = driver.findElement(By.xpath(xpath));
                 String score = element.findElement(By.xpath(xpath + "/span[5]")).getText().replaceAll("[^\\d]", "").trim();
-                if(j==1){
+                if (j == 1) {
                     String homeTeam = score.charAt(0) + " - " + score.charAt(1);
                     oneRowData.add(homeTeam);
                 }
-                if(j==2){
+                if (j == 2) {
                     String awayTeam = score.charAt(0) + " - " + score.charAt(1);
                     oneRowData.add(awayTeam);
                 }
@@ -136,7 +76,6 @@ public class flashDataScraper {
         datas.add(temp);
         oneRowData.clear();
     }
-
 
 
     public static void getOddsDataFromJson(String linkPart) throws IOException, JSONException, InterruptedException {
