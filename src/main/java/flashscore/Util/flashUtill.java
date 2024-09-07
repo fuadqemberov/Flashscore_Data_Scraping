@@ -32,7 +32,7 @@ public class flashUtill {
             options.addArguments("--ignore-certificate-errors"); // Optional: Ignore certificate errors
             options.addArguments("--silent"); // Optional: Suppress console output
 
-            driverr = new ChromeDriver(options);
+            driverr = new ChromeDriver();
         }
 
         return driverr;

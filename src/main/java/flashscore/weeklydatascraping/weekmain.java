@@ -20,7 +20,7 @@ public class weekmain {
 
 
         WebDriver driver = getChromeDriver();
-        for (int i = 1; i <= 2; i++) {
+        for (int i = 1; i <= 7; i++) {
             try {
                 goTo7DayBefore(driver, i);
                 getMathcIdFromSite(driver);
