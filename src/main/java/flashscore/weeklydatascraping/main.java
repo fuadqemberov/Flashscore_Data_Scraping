@@ -19,17 +19,14 @@ import java.util.Objects;
 
 public class main {
     static WebDriver driverr = null;
-    static List<String> matchIds;
-    static List<String> homeMatches = new ArrayList<>();;
-    static List<String> awayMatches = new ArrayList<>();;
+    static List<String> matchIds = new ArrayList<>();
+    static List<String> homeMatches = new ArrayList<>();
+    static List<String> awayMatches = new ArrayList<>();
     static List<List<String>> allmatches = new ArrayList<>();
-    static {
-        matchIds = new ArrayList<>(List.of(new String[]{"2598033","2598035","2598034"}));
-    }
 
     public static void main(String[] args) {
         WebDriver driver = getChromeDriver();
-        //getMatchIds(driver);
+        getMatchIds(driver);
         getMatchDatas(driver);
         writeMatchesToExcel(allmatches);
         driver.quit();
