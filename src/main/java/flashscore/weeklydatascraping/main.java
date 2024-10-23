@@ -13,9 +13,12 @@ import java.util.Objects;
 
 public class main {
     static WebDriver driverr = null;
-    static  List<String> matchIds;
+    static List<String> matchIds;
+    static List<String> homeMatches;
+    static List<String> awayMatches;
+    static List<List<String>> allmatches = new ArrayList<>();
     static {
-        matchIds = new ArrayList<>(List.of(new String[]{"2613314"}));
+        matchIds = new ArrayList<>(List.of(new String[]{"2677425"}));
     }
 
     public static void main(String[] args) {
@@ -32,24 +35,34 @@ public class main {
             driver.findElement(By.xpath("//*[@id='checkboxleague2']")).click();
             driver.findElement(By.xpath("//*[@id='checkboxleague1']")).click();
 
-            // Select dropdowns
-            Select dropdown1 = new Select(driver.findElement(By.id("selectMatchCount1")));
-            dropdown1.selectByValue("2"); // Select "Last 2"
+            try{
+                // Select dropdowns
+                Select dropdown1 = new Select(driver.findElement(By.id("selectMatchCount1")));
+                dropdown1.selectByValue("2"); // Select "Last 2"
 
-            Select dropdown2 = new Select(driver.findElement(By.id("selectMatchCount2")));
-            dropdown2.selectByValue("2"); // Select "Last 2"
+                Select dropdown2 = new Select(driver.findElement(By.id("selectMatchCount2")));
+                dropdown2.selectByValue("2"); // Select "Last 2"
+            } catch (Exception e){
+                System.out.println("Liqada son 2 oyunu yoxdu !");
+                continue;
+            }
 
-            printGamesHome(driver);
-            printGamesAway(driver);
-            String ht = driver.findElement(By.xpath("//*[@id=\"mScore\"]/div/div[2]/span/span[1]")).getText();
-            String ft = driver.
-                    findElement(By.xpath("//*[@id=\"mScore\"]/div/div[1]"))
-                    .getText()
-                    .concat(driver.findElement(By.xpath("//*[@id=\"mScore\"]/div/div[3]")).getText());
 
-            System.out.print(ht + " / " + ft.charAt(0)+"-"+ft.charAt(1));
+            addGamesHome(driver);
+            allmatches.add(homeMatches);
+            addGamesAway(driver);
+            allmatches.add(awayMatches);
         }
       }
+
+    public static void results(WebDriver driver,List<String> list) {
+        String ht = driver.findElement(By.xpath("//*[@id=\"mScore\"]/div/div[2]/span/span[1]")).getText();
+        String ft = driver.
+                findElement(By.xpath("//*[@id=\"mScore\"]/div/div[1]"))
+                .getText()
+                .concat(driver.findElement(By.xpath("//*[@id=\"mScore\"]/div/div[3]")).getText());
+        list.add(ht + " / " + ft.charAt(0)+"-"+ft.charAt(1));
+    }
 
     public static void getMatchIds(WebDriver driver) {
         String baseUrl = "https://live.nowgoal23.com/football/fixture?f=ft";
@@ -67,36 +80,39 @@ public class main {
 
     }
 
-    public static void printGamesHome(WebDriver driver) {
+    public static void addGamesHome(WebDriver driver) {
         for (int i = 1; i < 4; i++) {
             String idz = "1_" + i;
-            String xpath = "//tr[@id='tr" + idz + "']"; // Create the XPath
+            String xpath = "//tr[@id='tr" + idz + "']";
 
             try {
                 WebElement element = driver.findElement(By.xpath(xpath)); // Find the element using the XPath
                 String td =  element.findElements(By.tagName("td")).get(3).getText();
                 if(!td.isEmpty() && Objects.nonNull(td)){
                     System.out.println("Score : "+td);
+                    homeMatches.add(td);
                 }
 
+                results(driver, homeMatches);
             } catch (Exception e) {
                 System.out.println("Element not found for id: " + idz);
                 continue;
             }
         }
     }
-    public static void printGamesAway(WebDriver driver) {
+    public static void addGamesAway(WebDriver driver) {
         for (int i = 1; i < 4; i++) {
             String idz = "2_" + i;
-            String xpath = "//tr[@id='tr" + idz + "']"; // Create the XPath
+            String xpath = "//tr[@id='tr" + idz + "']";
 
             try {
                 WebElement element = driver.findElement(By.xpath(xpath)); // Find the element using the XPath
                 String td =  element.findElements(By.tagName("td")).get(3).getText();
                 if(!td.isEmpty() && Objects.nonNull(td)){
                     System.out.println("Score : "+td);
+                    awayMatches.add(td);
                 }
-
+             results(driver, awayMatches);
             } catch (Exception e) {
                 System.out.println("Element not found for id: " + idz);
                 continue;
