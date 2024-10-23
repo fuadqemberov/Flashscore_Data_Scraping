@@ -1,5 +1,9 @@
 package flashscore.weeklydatascraping;
 
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -7,6 +11,8 @@ import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.Select;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -25,6 +31,7 @@ public class main {
         WebDriver driver = getChromeDriver();
         //getMatchIds(driver);
         getMatchDatas(driver);
+        writeMatchesToExcel(allmatches);
         driver.quit();
     }
 
@@ -49,9 +56,14 @@ public class main {
 
 
             addGamesHome(driver);
-            allmatches.add(homeMatches);
+            List<String> temp1 = new ArrayList<>(homeMatches);
+            allmatches.add(temp1);
+            temp1.clear();
+
             addGamesAway(driver);
-            allmatches.add(awayMatches);
+            List<String> temp2 = new ArrayList<>(awayMatches);
+            allmatches.add(temp2);
+            temp2.clear();
         }
       }
 
@@ -119,6 +131,51 @@ public class main {
             }
         }
     }
+
+    public static void writeMatchesToExcel(List<List<String>> allmatches) {
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("Match Results");
+
+        // Create header row
+        Row headerRow = sheet.createRow(0);
+        headerRow.createCell(0).setCellValue("Match 1");
+        headerRow.createCell(1).setCellValue("Match 2");
+        headerRow.createCell(2).setCellValue("Result");
+
+        int rowNum = 1;
+
+
+        for (int i = 0; i < allmatches.size(); i++) {
+            List<String> matches = allmatches.get(i); // Get the matches for this matchId
+
+            // Check that there are at least 2 matches available
+            String match1 =  matches.get(0);
+            String match2 =  matches.get(1);
+            String result =  matches.get(2);
+
+
+            Row row = sheet.createRow(rowNum++);
+            row.createCell(0).setCellValue(match1);
+            row.createCell(1).setCellValue(match2);
+            row.createCell(2).setCellValue(result);
+        }
+
+
+        try (FileOutputStream fileOut = new FileOutputStream("match_results.xlsx")) {
+            workbook.write(fileOut);
+        } catch (IOException e) {
+            System.err.println("Error while writing to Excel file: " + e.getMessage());
+        } finally {
+            try {
+                workbook.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        System.out.println("Excel file created successfully!");
+    }
+
 
     public static WebDriver getChromeDriver() {
         System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
