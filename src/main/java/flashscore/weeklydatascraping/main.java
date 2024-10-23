@@ -47,7 +47,6 @@ public class main {
                 Select dropdown2 = new Select(driver.findElement(By.id("selectMatchCount2")));
                 dropdown2.selectByValue("2"); // Select "Last 2"
             } catch (Exception e){
-                System.out.println("Liqada son 2 oyunu yoxdu !");
                 continue;
             }
 
@@ -98,7 +97,6 @@ public class main {
                 WebElement element = driver.findElement(By.xpath(xpath)); // Find the element using the XPath
                 String td =  element.findElements(By.tagName("td")).get(3).getText();
                 if(!td.isEmpty() && Objects.nonNull(td)){
-                    System.out.println("Score : "+td);
                     homeMatches.add(td);
                 }
 
@@ -119,12 +117,11 @@ public class main {
                 WebElement element = driver.findElement(By.xpath(xpath)); // Find the element using the XPath
                 String td =  element.findElements(By.tagName("td")).get(3).getText();
                 if(!td.isEmpty() && Objects.nonNull(td)){
-                    System.out.println("Score : "+td);
+
                     awayMatches.add(td);
                 }
 
             } catch (Exception e) {
-                System.out.println("Element not found for id: " + idz);
                 continue;
             }
         }
