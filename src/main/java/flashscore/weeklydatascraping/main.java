@@ -20,11 +20,11 @@ import java.util.Objects;
 public class main {
     static WebDriver driverr = null;
     static List<String> matchIds;
-    static List<String> homeMatches;
-    static List<String> awayMatches;
+    static List<String> homeMatches = new ArrayList<>();;
+    static List<String> awayMatches = new ArrayList<>();;
     static List<List<String>> allmatches = new ArrayList<>();
     static {
-        matchIds = new ArrayList<>(List.of(new String[]{"2677425"}));
+        matchIds = new ArrayList<>(List.of(new String[]{"2598033","2598035","2598034"}));
     }
 
     public static void main(String[] args) {
@@ -56,14 +56,14 @@ public class main {
 
 
             addGamesHome(driver);
-            List<String> temp1 = new ArrayList<>(homeMatches);
+           List<String> temp1 = new ArrayList<>(homeMatches);
             allmatches.add(temp1);
-            temp1.clear();
+            homeMatches.clear();
 
             addGamesAway(driver);
             List<String> temp2 = new ArrayList<>(awayMatches);
-            allmatches.add(temp2);
-            temp2.clear();
+           allmatches.add(temp2);
+            awayMatches.clear();
         }
       }
 
@@ -105,12 +105,13 @@ public class main {
                     homeMatches.add(td);
                 }
 
-                results(driver, homeMatches);
+
             } catch (Exception e) {
-                System.out.println("Element not found for id: " + idz);
+
                 continue;
             }
         }
+        results(driver, homeMatches);
     }
     public static void addGamesAway(WebDriver driver) {
         for (int i = 1; i < 4; i++) {
@@ -124,12 +125,13 @@ public class main {
                     System.out.println("Score : "+td);
                     awayMatches.add(td);
                 }
-             results(driver, awayMatches);
+
             } catch (Exception e) {
                 System.out.println("Element not found for id: " + idz);
                 continue;
             }
         }
+        results(driver, awayMatches);
     }
 
     public static void writeMatchesToExcel(List<List<String>> allmatches) {
@@ -140,7 +142,7 @@ public class main {
         Row headerRow = sheet.createRow(0);
         headerRow.createCell(0).setCellValue("Match 1");
         headerRow.createCell(1).setCellValue("Match 2");
-        headerRow.createCell(2).setCellValue("Result");
+        headerRow.createCell(2).setCellValue("Result ht / ft");
 
         int rowNum = 1;
 
@@ -149,8 +151,8 @@ public class main {
             List<String> matches = allmatches.get(i); // Get the matches for this matchId
 
             // Check that there are at least 2 matches available
-            String match1 =  matches.get(0);
-            String match2 =  matches.get(1);
+            String match1 =  matches.get(0).substring(0, 3);
+            String match2 =  matches.get(1).substring(0, 3);
             String result =  matches.get(2);
 
 
