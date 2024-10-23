@@ -39,24 +39,15 @@ public class main {
             Select dropdown2 = new Select(driver.findElement(By.id("selectMatchCount2")));
             dropdown2.selectByValue("2"); // Select "Last 2"
 
-//            for (int i = 1; i < 4; i++) { // Loop from 1 to 3 (as 4 is exclusive)
-//                String idz = "1_" + i; // Construct the id part
-//                String xpath = "//tr[@id='tr" + idz + "']"; // Create the XPath
-//
-//                try {
-//                    WebElement element = driver.findElement(By.xpath(xpath)); // Find the element using the XPath
-//                    String td =  element.findElements(By.tagName("td")).get(3).getText();
-//                    if(!td.isEmpty() && Objects.nonNull(td)){
-//                        System.out.println("Score : "+td);
-//                    }
-//
-//                } catch (Exception e) {
-//                    System.out.println("Element not found for id: " + idz);
-//                    continue; // Continue to the next iteration
-//                }
-//            }
             printGamesHome(driver);
             printGamesAway(driver);
+            String ht = driver.findElement(By.xpath("//*[@id=\"mScore\"]/div/div[2]/span/span[1]")).getText();
+            String ft = driver.
+                    findElement(By.xpath("//*[@id=\"mScore\"]/div/div[1]"))
+                    .getText()
+                    .concat(driver.findElement(By.xpath("//*[@id=\"mScore\"]/div/div[3]")).getText());
+
+            System.out.print(ht + " / " + ft.charAt(0)+"-"+ft.charAt(1));
         }
       }
 
@@ -77,8 +68,8 @@ public class main {
     }
 
     public static void printGamesHome(WebDriver driver) {
-        for (int i = 1; i < 4; i++) { // Loop from 1 to 3 (as 4 is exclusive)
-            String idz = "1_" + i; // Construct the id part
+        for (int i = 1; i < 4; i++) {
+            String idz = "1_" + i;
             String xpath = "//tr[@id='tr" + idz + "']"; // Create the XPath
 
             try {
@@ -90,13 +81,13 @@ public class main {
 
             } catch (Exception e) {
                 System.out.println("Element not found for id: " + idz);
-                continue; // Continue to the next iteration
+                continue;
             }
         }
     }
     public static void printGamesAway(WebDriver driver) {
-        for (int i = 1; i < 4; i++) { // Loop from 1 to 3 (as 4 is exclusive)
-            String idz = "2_" + i; // Construct the id part
+        for (int i = 1; i < 4; i++) {
+            String idz = "2_" + i;
             String xpath = "//tr[@id='tr" + idz + "']"; // Create the XPath
 
             try {
@@ -108,7 +99,7 @@ public class main {
 
             } catch (Exception e) {
                 System.out.println("Element not found for id: " + idz);
-                continue; // Continue to the next iteration
+                continue;
             }
         }
     }
