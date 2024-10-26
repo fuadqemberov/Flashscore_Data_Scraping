@@ -17,7 +17,6 @@ import java.util.*;
 
 public class main {
     static WebDriver driverr = null;
-    //static List<String> matchIds = new ArrayList<>();
     static List<String> homeMatches = new ArrayList<>();
     static List<String> awayMatches = new ArrayList<>();
     static List<List<String>> allmatches = new ArrayList<>();
@@ -47,16 +46,18 @@ public class main {
                 continue;
             }
 
+            if(homeMatches.size()==awayMatches.size()){
+                addGamesHome(driver);
+                List<String> temp1 = new ArrayList<>(homeMatches);
+                allmatches.add(temp1);
+                homeMatches.clear();
 
-            addGamesHome(driver);
-           List<String> temp1 = new ArrayList<>(homeMatches);
-            allmatches.add(temp1);
-            homeMatches.clear();
+                addGamesAway(driver);
+                List<String> temp2 = new ArrayList<>(awayMatches);
+                allmatches.add(temp2);
+                awayMatches.clear();
+            }
 
-            addGamesAway(driver);
-            List<String> temp2 = new ArrayList<>(awayMatches);
-           allmatches.add(temp2);
-            awayMatches.clear();
         }
       }
 
@@ -160,36 +161,31 @@ public class main {
             List<String> matches = allmatches.get(i);
 
 
-            String match1 =  matches.get(0).substring(0, 3);
-            String match2 =  matches.get(1).substring(0, 3);
-            String result;
-            try{
-                result =  matches.get(2);
-            }catch (Exception e){
-                result = "N/A";
-            }
+            String match1 = matches.get(0).substring(0, 3);
+            String match2 = matches.get(1).substring(0, 3);
+            String result = matches.get(2);
+
             Row row = sheet.createRow(rowNum++);
             row.createCell(0).setCellValue(match1);
             row.createCell(1).setCellValue(match2);
             row.createCell(2).setCellValue(result);
-        }
 
 
-        try (FileOutputStream fileOut = new FileOutputStream("match_results.xlsx")) {
-            workbook.write(fileOut);
-        } catch (IOException e) {
-            System.err.println("Error while writing to Excel file: " + e.getMessage());
-        } finally {
-            try {
-                workbook.close();
+            try (FileOutputStream fileOut = new FileOutputStream("match_results.xlsx")) {
+                workbook.write(fileOut);
             } catch (IOException e) {
-                e.printStackTrace();
+                System.err.println("Error while writing to Excel file: " + e.getMessage());
+            } finally {
+                try {
+                    workbook.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
+
+            System.out.println("Excel file created successfully!");
         }
-
-        System.out.println("Excel file created successfully!");
     }
-
 
     public static WebDriver getChromeDriver() {
         System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
