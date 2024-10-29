@@ -9,10 +9,14 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.Select;
+import org.openqa.selenium.support.ui.Wait;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.*;
 
 public class main {
@@ -28,25 +32,21 @@ public class main {
         driver.quit();
     }
 
-      public static void getMatchDatas(WebDriver driver) {
+    public static void getMatchDatas(WebDriver driver) {
         String matchUrl = "https://live.nowgoal23.com/match/h2h-";
-        for(String id : getMatchIds(driver)){
+        for (String id : getMatchIds(driver)) {
             driver.get(matchUrl + id);
             driver.findElement(By.xpath("//*[@id='checkboxleague2']")).click();
             driver.findElement(By.xpath("//*[@id='checkboxleague1']")).click();
 
-            try{
+            try {
                 // Select dropdowns
                 Select dropdown1 = new Select(driver.findElement(By.id("selectMatchCount1")));
-                dropdown1.selectByValue("2"); // Select "Last 2"
+                dropdown1.selectByValue("2");
 
                 Select dropdown2 = new Select(driver.findElement(By.id("selectMatchCount2")));
-                dropdown2.selectByValue("2"); // Select "Last 2"
-            } catch (Exception e){
-                continue;
-            }
+                dropdown2.selectByValue("2");
 
-            if(homeMatches.size()==awayMatches.size()){
                 addGamesHome(driver);
                 List<String> temp1 = new ArrayList<>(homeMatches);
                 allmatches.add(temp1);
@@ -56,17 +56,22 @@ public class main {
                 List<String> temp2 = new ArrayList<>(awayMatches);
                 allmatches.add(temp2);
                 awayMatches.clear();
+
+            } catch (Exception e) {
+                System.out.println(id+"  Oyunun liqada son 2 oyunu yoxdu !");
+                continue;
             }
 
         }
-      }
+    }
 
     public static void results(WebDriver driver, List<String> list) {
         try {
-            // İlk olarak elementlerin var olduğundan emin olalım
-            WebElement htElement = driver.findElement(By.xpath("//div[@id='mScore']//span[@title='Score 1st Half']"));
-            WebElement ft1Element = driver.findElement(By.xpath("//div[@id='mScore']//div[@class='end']//div[@class='score'][1]"));
-            WebElement ft2Element = driver.findElement(By.xpath("//div[@id='mScore']//div[@class='end']//div[@class='score'][2]"));
+            // WebDriverWait kullanarak elementlerin yüklenmesini bekleyin
+            Wait<WebDriver> wait = new WebDriverWait(driver, Duration.ofMillis(1500L));
+            WebElement htElement = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//span[@title='Score 1st Half']")));
+            WebElement ft1Element = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//div[@id='mScore']//div[@class='end']//div[@class='score'][1]")));
+            WebElement ft2Element = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//div[@id='mScore']//div[@class='end']//div[@class='score'][2]")));
 
             // getText() çağrılarını yapalım ve null kontrolü ekleyelim
             String ht = htElement.getText();
@@ -79,7 +84,8 @@ public class main {
 
                 // String uzunluk kontrolü
                 if (ft.length() >= 2) {
-                    list.add(ht + " / " + ft.charAt(0) + "-" + ft.charAt(1));
+                    String result = ht + " / " + ft.charAt(0) + "-" + ft.charAt(1);
+                    list.add(result); // Sonucu ekleyelim
                 } else {
                     System.out.println("Final score string is too short: " + ft);
                 }
@@ -115,35 +121,32 @@ public class main {
 
         String xpath = "//tr[starts-with(@id, 'tr1_') and (not(@style) or @style='')]";
 
-            try {
-                WebElement element = driver.findElement(By.xpath(xpath)); // Find the element using the XPath
-                String td =  element.findElements(By.tagName("td")).get(3).getText();
-                if(!td.isEmpty() && Objects.nonNull(td)){
-                    homeMatches.add(td);
-                }
-               } catch (Exception e) {
-                homeMatches.add("N/A");
+
+        List<WebElement> elements = driver.findElements(By.xpath(xpath));
+        for (WebElement element : elements) {
+            String td = element.findElements(By.tagName("td")).get(3).getText();
+            if (!td.isEmpty()) {
+                homeMatches.add(td);
             }
-
-
+        }
         results(driver, homeMatches);
     }
+
     public static void addGamesAway(WebDriver driver) {
 
         String xpath = "//tr[starts-with(@id, 'tr2_') and (not(@style) or @style='')]";
-              try {
-                WebElement element = driver.findElement(By.xpath(xpath)); // Find the element using the XPath
-                String td =  element.findElements(By.tagName("td")).get(3).getText();
-                if(!td.isEmpty() && Objects.nonNull(td)){
-                    awayMatches.add(td);
-                }
 
-            } catch (Exception e) {
-                  awayMatches.add("N/A");
+
+        List<WebElement> elements = driver.findElements(By.xpath(xpath));
+        for (WebElement element : elements) {
+            String td = element.findElements(By.tagName("td")).get(3).getText();
+            if (!td.isEmpty()) {
+                awayMatches.add(td);
             }
-
+        }
         results(driver, awayMatches);
     }
+
 
     public static void writeMatchesToExcel(List<List<String>> allmatches) {
         Workbook workbook = new XSSFWorkbook();
@@ -153,6 +156,7 @@ public class main {
         headerRow.createCell(0).setCellValue("Match 1");
         headerRow.createCell(1).setCellValue("Match 2");
         headerRow.createCell(2).setCellValue("Result ht / ft");
+
 
         int rowNum = 1;
 
@@ -165,27 +169,29 @@ public class main {
             String match2 = matches.get(1).substring(0, 3);
             String result = matches.get(2);
 
+
             Row row = sheet.createRow(rowNum++);
             row.createCell(0).setCellValue(match1);
             row.createCell(1).setCellValue(match2);
             row.createCell(2).setCellValue(result);
 
-
-            try (FileOutputStream fileOut = new FileOutputStream("match_results.xlsx")) {
-                workbook.write(fileOut);
-            } catch (IOException e) {
-                System.err.println("Error while writing to Excel file: " + e.getMessage());
-            } finally {
-                try {
-                    workbook.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            System.out.println("Excel file created successfully!");
         }
+
+        try (FileOutputStream fileOut = new FileOutputStream("match_results.xlsx")) {
+            workbook.write(fileOut);
+        } catch (IOException e) {
+            System.err.println("Error while writing to Excel file: " + e.getMessage());
+        } finally {
+            try {
+                workbook.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        System.out.println("Excel file created successfully!");
     }
+
 
     public static WebDriver getChromeDriver() {
         System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
