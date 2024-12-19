@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.gg;
+package flashscore.weeklydatascraping.nowgoal;
 
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -21,16 +21,16 @@ public class nowgoalmultiThread {
     private static final int WAIT_TIME = 2000;
     private static final int PAGE_LOAD_TIMEOUT = 10;
     private static final String LINK = "https://football.nowgoal29.com/league/";
+    private static final String LINK2 = "https://football.nowgoal29.com/subleague/";
     private static final String YEAR = "2024-2025/";
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors(); // CPU çekirdek sayısı kadar thread
-//    private static final List<String> LEAGUE_IDS = Arrays.asList(
-//            "36", "31", "5", "17", "16", "29", "23", "11", "693",
-//            "9", "8", "33", "40", "34", "7", "127", "3", "128",
-//            "27", "10", "6", "119", "137", "32", "124", "132",
-//            "30", "130", "136", "133", "247", "159", "129"
-//    );
-    private static final List<String> LEAGUE_IDS = Arrays.asList("1741");
-
+    private static final List<String> LEAGUE_IDS = Arrays.asList(
+            "36", "31", "5", "17", "16", "29", "23", "11", "693",
+            "9", "8", "33", "40", "34", "7", "127", "3", "128",
+            "27", "10", "6", "119", "137", "32", "124", "132",
+            "30", "130", "136", "133", "247", "159", "129"
+    );
+//    private static final List<String> LEAGUE_IDS = Arrays.asList("7");
     private static final ConcurrentHashMap<String, List<List<String>>> results = new ConcurrentHashMap<>();
     private static final AtomicInteger completedTasks = new AtomicInteger(0);
 
@@ -109,7 +109,12 @@ public class nowgoalmultiThread {
 
     private static List<String> getTeamList(WebDriver driver, String id) throws InterruptedException {
         List<String> teamList = new ArrayList<>();
-        driver.get(LINK + YEAR + id);
+        try{
+            driver.get(LINK + YEAR + id);
+        }catch (Exception e){
+            driver.get(LINK2 + YEAR + id);
+        }
+
         Thread.sleep(WAIT_TIME);
 
         WebElement element = driver.findElement(By.cssSelector("a[href='/scorestats/" + id + "']"));
@@ -199,7 +204,11 @@ public class nowgoalmultiThread {
     }
 
     private static String findWeekNum(WebDriver driver, String id) throws InterruptedException {
-        driver.get(LINK + YEAR + id);
+        try{
+            driver.get(LINK + YEAR + id);
+        }catch (Exception e){
+            driver.get(LINK2 + YEAR + id);
+        }
         Thread.sleep(WAIT_TIME);
         return driver.findElement(By.cssSelector("td.lsm2[style*='background-color']")).getText();
     }
