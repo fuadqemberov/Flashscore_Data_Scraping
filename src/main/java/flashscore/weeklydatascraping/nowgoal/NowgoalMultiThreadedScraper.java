@@ -52,7 +52,7 @@ public class NowgoalMultiThreadedScraper {
 
     public static List<String> getMatchIds(WebDriver driver) {
         List<String> matchIds2 = new ArrayList<>();
-        String baseUrl = "https://live16.nowgoal29.com//football/fixture?f=ft";
+        String baseUrl = "https://live18.nowgoal29.com/football/fixture?f=ft";
         for (int i = 1; i < 8; i++) {
             String url = baseUrl + i;
             driver.get(url);
@@ -68,7 +68,7 @@ public class NowgoalMultiThreadedScraper {
     }
 
     private static synchronized void processMatch(WebDriver driver, long id) {
-        String matchUrl = "https://live16.nowgoal29.com//match/h2h-";
+        String matchUrl = "https://live18.nowgoal29.com/match/h2h-";
         driver.get(matchUrl + id);
 
         try {
