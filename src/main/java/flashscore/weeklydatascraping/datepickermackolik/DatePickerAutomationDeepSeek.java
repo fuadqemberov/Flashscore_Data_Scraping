@@ -52,7 +52,7 @@ public class DatePickerAutomationDeepSeek {
 //        try {
 //            getMatchesByDateRange(driver, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 1));
 //        } finally {
-//
+//          driver.quit()
 //        }
 
         // Step 2: Process links in parallel
