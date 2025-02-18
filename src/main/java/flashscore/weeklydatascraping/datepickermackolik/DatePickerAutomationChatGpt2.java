@@ -33,22 +33,22 @@ public class DatePickerAutomationChatGpt2 {
     private static List<List<String>> allData = new ArrayList<>();
     private static List<String> oneRowData = new ArrayList<>();
 
-    static {
-        try {
-            writer = new FileWriter("mackolik.txt");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
+//    static {
+//        try {
+//            writer = new FileWriter("mackolik.txt");
+//        } catch (IOException e) {
+//            throw new RuntimeException(e);
+//        }
+//    }
 
     public static void main(String[] args) throws InterruptedException, IOException {
         WebDriver driver = getChromeDriver();
-        getMatchesByDateRange(driver, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 1));
-        if (!links.isEmpty()) {
+        //getMatchesByDateRange(driver, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 1));
+//        if (!links.isEmpty()) {
             for (String link : readFile()) {
                 getData(link, driver);
             }
-        }
+
         driver.quit();
         writeMatchesToExcel();
     }
