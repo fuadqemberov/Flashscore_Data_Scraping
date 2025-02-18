@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class DatePickerAutomationChatGpt {
@@ -31,6 +32,8 @@ public class DatePickerAutomationChatGpt {
     private static WebDriver driver = null;
     private static List<String> links = new ArrayList<>();
     private static FileWriter writer;
+    private static List<List<String>> allData = new ArrayList<>();
+    private static List<String> oneRowData = new ArrayList<>();
 
     static {
         try {
@@ -42,39 +45,35 @@ public class DatePickerAutomationChatGpt {
 
     public static void main(String[] args) throws InterruptedException, IOException {
         WebDriver driver = getChromeDriver();
-        getMatchesByDateRange(driver, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 2));
-        List<String> linkler = readFile();
-        System.out.println(linkler.get(0));
-        if (!linkler.isEmpty()) {
-            for (String link : linkler) {
-                getData2(link, driver);
-            }
-        }
-
-    }
-
-    private static void getData2(String link, WebDriver driver) throws InterruptedException {
-        WebDriver driver2 = getChromeDriver();
-        driver2.get(link);
+        //getMatchesByDateRange(driver, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 2));
+        //if (!links.isEmpty()) {
+//            for (String link : readFile()) {
+//                getData(link, driver);
+//            }
+//        }
+        getData("https://www.mackolik.com/mac/brentford-vs-arsenal/bywfg7shyq9ey9h4qn1o86ec4",driver);
+        driver.quit();
     }
 
     private static void getData(String link, WebDriver driver) throws InterruptedException {
+        List<String> homeList = new ArrayList<>();
+        List<String> awayList = new ArrayList<>();
+
         try {
             driver.get(link);
             Thread.sleep(1500);
         } catch (Exception ex) {
-            System.out.println("Sayfa yüklenemedi: " + ex.getMessage());
-            return; // Sayfa yüklenmezse işlemi sonlandır
+            System.out.println("Sayfa yüklenemedi: ");
+            return;
         }
 
         try {
-            // "Karşılaştırma" butonunun yüklenmesini bekle
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
             WebElement compareButton = wait.until(ExpectedConditions.elementToBeClickable(By.xpath("//a[span[text()='Karşılaştırma']]")));
             compareButton.click();
             Thread.sleep(3500);
         } catch (Exception ex) {
-            System.out.println("Karşılaştırma butonu bulunamadı veya tıklanamadı: " + ex.getMessage());
+            System.out.println("Karşılaştırma butonu bulunamadı veya tıklanamadı: ");
             return;
         }
 
@@ -93,11 +92,26 @@ public class DatePickerAutomationChatGpt {
                     String score = scoreElement.getText();
                     String away = awayElement.getText();
 
+                    if (j == 1) {
+                        homeList.addAll(Arrays.asList(home, score, away));
+                    }
+
+                    if (j == 2) {
+                        awayList.addAll(Arrays.asList(home, score, away));
+                    }
+
                     System.out.println(home + " " + score + " " + away);
                 } catch (Exception ex) {
-                    System.out.println("Veri alınamadı (j=" + j + ", i=" + i + "): " + ex.getMessage());
+                    System.out.println("Veri alınamadı (j=" + j + ", i=" + i);
                 }
             }
+            List<String> temp1 = homeList;
+            List<String> temp2 = awayList;
+            allData.add(temp1);
+            allData.add(temp2);
+            temp1.clear();
+            temp2.clear();
+            System.out.println(allData);
         }
     }
 
@@ -167,7 +181,6 @@ public class DatePickerAutomationChatGpt {
         }
 
         writer.close();
-        driver.quit();
     }
 
     private static void adjustYear(WebDriver driver, int targetYear) throws InterruptedException {
@@ -196,7 +209,7 @@ public class DatePickerAutomationChatGpt {
             } else {
                 driver.findElement(By.xpath("//div[@class='widget-datepicker__selector widget-datepicker__selector--month']/div[@class='widget-datepicker__nav widget-datepicker__nav--next']")).click();
             }
-            Thread.sleep(500); // Wait for the month to change
+            Thread.sleep(500);
         }
     }
 
@@ -242,64 +255,57 @@ public class DatePickerAutomationChatGpt {
         return driver;
     }
 
-    public static void writeMatchesToExcel(List<List<String>> allmatches) {
-        Workbook workbook = new XSSFWorkbook();
-        Sheet sheet = workbook.createSheet("Match Results");
-
-        Row headerRow = sheet.createRow(0);
-        headerRow.createCell(0).setCellValue("Home-4");
-        headerRow.createCell(1).setCellValue("Score-4");
-        headerRow.createCell(2).setCellValue("Away-4");
-
-        headerRow.createCell(3).setCellValue("Home-3");
-        headerRow.createCell(4).setCellValue("Score-3");
-        headerRow.createCell(5).setCellValue("Away-3");
-
-        headerRow.createCell(6).setCellValue("Home-2");
-        headerRow.createCell(7).setCellValue("Score-2");
-        headerRow.createCell(8).setCellValue("Away-2");
-
-        headerRow.createCell(9).setCellValue("Home-1");
-        headerRow.createCell(10).setCellValue("Score-1");
-        headerRow.createCell(11).setCellValue("Away-1");
-
-        headerRow.createCell(12).setCellValue("HT / FT");
-
-
-        int rowNum = 1;
-
-
-        for (int i = 0; i < allmatches.size(); i++) {
-            List<String> matches = allmatches.get(i);
-            System.out.println(matches);
-
-            String match1 = matches.get(0).substring(0, 3);
-            String match2 = matches.get(1).substring(0, 3);
-            String match3 = matches.get(2).substring(0, 3);
-            String liga = matches.get(3);
-            String result = matches.get(4);
-
-            Row row = sheet.createRow(rowNum++);
-            row.createCell(0).setCellValue(match1);
-            row.createCell(1).setCellValue(match2);
-            row.createCell(2).setCellValue(match3);
-            row.createCell(3).setCellValue(liga);
-            row.createCell(4).setCellValue(result);
-
-        }
-        try (FileOutputStream fileOut = new FileOutputStream("match_results.xlsx")) {
-            workbook.write(fileOut);
-        } catch (IOException e) {
-            System.err.println("Error while writing to Excel file: " + e.getMessage());
-        } finally {
-            try {
-                workbook.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        System.out.println("Excel file created successfully!");
-
-    }
+//    public static void writeMatchesToExcel() {
+//        Workbook workbook = new XSSFWorkbook();
+//        Sheet sheet = workbook.createSheet("Match Results");
+//
+//        Row headerRow = sheet.createRow(0);
+//        headerRow.createCell(0).setCellValue("Home-4");
+//        headerRow.createCell(1).setCellValue("Score-4");
+//        headerRow.createCell(2).setCellValue("Away-4");
+//
+//        headerRow.createCell(3).setCellValue("Home-3");
+//        headerRow.createCell(4).setCellValue("Score-3");
+//        headerRow.createCell(5).setCellValue("Away-3");
+//
+//        headerRow.createCell(6).setCellValue("Home-2");
+//        headerRow.createCell(7).setCellValue("Score-2");
+//        headerRow.createCell(8).setCellValue("Away-2");
+//
+//        headerRow.createCell(9).setCellValue("Home-1");
+//        headerRow.createCell(10).setCellValue("Score-1");
+//        headerRow.createCell(11).setCellValue("Away-1");
+//
+//        headerRow.createCell(12).setCellValue("HT / FT");
+//
+//
+//        int rowNum = 1;
+//
+//
+//        for (int i = 0; i < allData.size(); i++) {
+//            List<String> matches = allData.get(i);
+//
+//            Row row = sheet.createRow(rowNum++);
+//            row.createCell(0).setCellValue(matches.get());
+//            row.createCell(1).setCellValue(match2);
+//            row.createCell(2).setCellValue(match3);
+//            row.createCell(3).setCellValue(liga);
+//            row.createCell(4).setCellValue(result);
+//
+//        }
+//        try (FileOutputStream fileOut = new FileOutputStream("mackolik_results.xlsx")) {
+//            workbook.write(fileOut);
+//        } catch (IOException e) {
+//            System.err.println("Error while writing to Excel file: ");
+//        } finally {
+//            try {
+//                workbook.close();
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
+//        }
+//
+//        System.out.println("Excel file created successfully!");
+//
+//    }
 }
