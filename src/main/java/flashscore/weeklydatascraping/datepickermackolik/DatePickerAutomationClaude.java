@@ -34,7 +34,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-public class DatePickerAutomationChatGpt3 {
+public class DatePickerAutomationClaude {
 
     private static List<String> links = Collections.synchronizedList(new ArrayList<>());
     private static CopyOnWriteArrayList<List<String>> allData = new CopyOnWriteArrayList<>();

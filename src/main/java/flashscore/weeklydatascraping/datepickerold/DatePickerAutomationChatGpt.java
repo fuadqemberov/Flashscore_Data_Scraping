@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.datepickermackolik;
+package flashscore.weeklydatascraping.datepickerold;
 
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -9,7 +9,6 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
@@ -25,7 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DatePickerAutomationChatGpt2 {
+public class DatePickerAutomationChatGpt {
 
     private static WebDriver driver = null;
     private static List<String> links = new ArrayList<>();
@@ -33,22 +32,22 @@ public class DatePickerAutomationChatGpt2 {
     private static List<List<String>> allData = new ArrayList<>();
     private static List<String> oneRowData = new ArrayList<>();
 
-//    static {
-//        try {
-//            writer = new FileWriter("mackolik.txt");
-//        } catch (IOException e) {
-//            throw new RuntimeException(e);
-//        }
-//    }
+    static {
+        try {
+            writer = new FileWriter("mackolik.txt");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public static void main(String[] args) throws InterruptedException, IOException {
         WebDriver driver = getChromeDriver();
-        //getMatchesByDateRange(driver, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 1));
-//        if (!links.isEmpty()) {
+        getMatchesByDateRange(driver, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 1));
+        if (!links.isEmpty()) {
             for (String link : readFile()) {
                 getData(link, driver);
             }
-
+        }
         driver.quit();
         writeMatchesToExcel();
     }
@@ -63,15 +62,13 @@ public class DatePickerAutomationChatGpt2 {
         }
 
         try {
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-            WebElement karsilastirmaButton = wait.until(ExpectedConditions.elementToBeClickable(By.xpath("//a[span[text()='Karşılaştırma']]")));
-            // Use Actions class to move to the element and click
-            Actions actions = new Actions(driver);
-            actions.moveToElement(karsilastirmaButton).click().perform();
+
+            Thread.sleep(2000);
+            driver.findElement(By.xpath("//a[span[text()='Karşılaştırma']]")).click();
             Thread.sleep(4500);
         } catch (Exception ex) {
             System.out.println("Karşılaştırma butonu bulunamadı veya tıklanamadı: " + ex.getMessage());
-            return; // Exit the method if the button can't be clicked after waiting.
+            return;
         }
 
         String htFt = extractFormattedScore(link, driver);
@@ -96,7 +93,7 @@ public class DatePickerAutomationChatGpt2 {
                     teamList.add(score);
                     teamList.add(away);
 
-                    if (i == 6) {
+                    if(i==6){
                         teamList.add(htFt);
                     }
                     System.out.println(home + " " + score + " " + away);
@@ -110,7 +107,7 @@ public class DatePickerAutomationChatGpt2 {
 
     }
 
-    public static String extractFormattedScore(String url, WebDriver driver) {
+    public static String extractFormattedScore(String url , WebDriver driver) {
         String formattedScore = "";
 
         try {
