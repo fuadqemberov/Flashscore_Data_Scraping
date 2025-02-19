@@ -147,7 +147,7 @@ public class DatePickerAutomationClaude {
             List<String> teamList = new ArrayList<>();
             boolean hasData = false;
 
-            for (int i = 3; i < 7; i++) {
+            for (int i = 2; i < 7; i++) {
                 try {
                     // Using explicit waits for each element
                     Wait<WebDriver> wait = new FluentWait<>(driver)
@@ -160,9 +160,9 @@ public class DatePickerAutomationClaude {
                     String xpathScore = "/html/body/div[5]/div[2]/main/div[1]/div[2]/div/div[3]/div/div/div[2]/div[" + j + "]/div[" + i + "]/div/a[2]/div";
                     String xpathAway = "/html/body/div[5]/div[2]/main/div[1]/div[2]/div/div[3]/div/div/div[2]/div[" + j + "]/div[" + i + "]/div/a[3]/div/span[2]";
 
-                    WebElement homeElement = wait.until(x -> driver.findElement(By.xpath(xpathHome)));
-                    WebElement scoreElement = wait.until(x -> driver.findElement(By.xpath(xpathScore)));
-                    WebElement awayElement = wait.until(x -> driver.findElement(By.xpath(xpathAway)));
+                    WebElement homeElement = wait.until(x -> x.findElement(By.xpath(xpathHome)));
+                    WebElement scoreElement = wait.until(x -> x.findElement(By.xpath(xpathScore)));
+                    WebElement awayElement = wait.until(x -> x.findElement(By.xpath(xpathAway)));
 
                     String home = homeElement.getText();
                     String score = scoreElement.getText();
@@ -463,26 +463,34 @@ public class DatePickerAutomationClaude {
         Sheet sheet = workbook.createSheet("Match Results");
 
         Row headerRow = sheet.createRow(0);
-        headerRow.createCell(0).setCellValue("Home-4");
-        headerRow.createCell(1).setCellValue("Score-4");
-        headerRow.createCell(2).setCellValue("Away-4");
-        headerRow.createCell(3).setCellValue("Home-3");
-        headerRow.createCell(4).setCellValue("Score-3");
-        headerRow.createCell(5).setCellValue("Away-3");
-        headerRow.createCell(6).setCellValue("Home-2");
-        headerRow.createCell(7).setCellValue("Score-2");
-        headerRow.createCell(8).setCellValue("Away-2");
-        headerRow.createCell(9).setCellValue("Home-1");
-        headerRow.createCell(10).setCellValue("Score-1");
-        headerRow.createCell(11).setCellValue("Away-1");
-        headerRow.createCell(12).setCellValue("HT / FT");
+        headerRow.createCell(0).setCellValue("Result-Home");
+        headerRow.createCell(1).setCellValue("Result-Score");
+        headerRow.createCell(2).setCellValue("Result-Away");
+
+        headerRow.createCell(3).setCellValue("Home-4");
+        headerRow.createCell(4).setCellValue("Score-4");
+        headerRow.createCell(5).setCellValue("Away-4");
+
+        headerRow.createCell(6).setCellValue("Home-3");
+        headerRow.createCell(7).setCellValue("Score-3");
+        headerRow.createCell(8).setCellValue("Away-3");
+
+        headerRow.createCell(9).setCellValue("Home-2");
+        headerRow.createCell(10).setCellValue("Score-2");
+        headerRow.createCell(11).setCellValue("Away-2");
+
+        headerRow.createCell(12).setCellValue("Home-1");
+        headerRow.createCell(13).setCellValue("Score-1");
+        headerRow.createCell(14).setCellValue("Away-1");
+
+        headerRow.createCell(15).setCellValue("HT / FT");
 
         int rowNum = 1;
         for (List<String> teamMatches : allData) {
             Row row = sheet.createRow(rowNum++);
 
-            if (teamMatches.size() >= 13) {  // Ensure we have at least 4 matches
-                for (int i = 0; i < 13; i++) {
+            if (teamMatches.size() >= 16) {
+                for (int i = 0; i < 16; i++) {
                     row.createCell(i).setCellValue(teamMatches.get(i));
                 }
             } else {
@@ -492,7 +500,7 @@ public class DatePickerAutomationClaude {
                     row.createCell(i).setCellValue(teamMatches.get(i));
                 }
                 // Fill remaining cells with N/A
-                for (int i = teamMatches.size(); i < 13; i++) {
+                for (int i = teamMatches.size(); i < 16; i++) {
                     row.createCell(i).setCellValue("N/A");
                 }
             }
