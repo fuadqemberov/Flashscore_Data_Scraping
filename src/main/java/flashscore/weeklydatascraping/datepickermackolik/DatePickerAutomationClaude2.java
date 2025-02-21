@@ -32,16 +32,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
-public class DatePickerAutomationClaude {
+public class DatePickerAutomationClaude2 {
 
     private static List<String> links = Collections.synchronizedList(new ArrayList<>());
     private static CopyOnWriteArrayList<List<String>> allData = new CopyOnWriteArrayList<>();
-    private static final int MAX_THREADS = Math.max(1, Runtime.getRuntime().availableProcessors()); // Leave one core free
+    private static final int MAX_THREADS = 10; // Increased number of threads to 10
     private static final Object fileLock = new Object();
     private static final int MAX_RETRIES = 3;
 
@@ -59,16 +57,16 @@ public class DatePickerAutomationClaude {
 //        }
 
         // Step 2: Process links in parallel
-
         List<String> linksToProcess = readFile();
         processLinksInParallel(linksToProcess);
 
         driver.quit();
+        long endTime = System.currentTimeMillis();
+        System.out.println("Total execution time: " + (endTime - startTime) / 1000 + " seconds");
         // Step 3: Write results to Excel
         writeMatchesToExcel();
 
-        long endTime = System.currentTimeMillis();
-        System.out.println("Total execution time: " + (endTime - startTime) / 1000 + " seconds");
+
     }
 
     private static void processLinksInParallel(List<String> linksToProcess) throws InterruptedException {
@@ -95,13 +93,13 @@ public class DatePickerAutomationClaude {
                                 // Clear cookies and cache for a fresh start
                                 threadDriver.manage().deleteAllCookies();
                                 threadDriver.navigate().refresh();
-                                Thread.sleep(1000 * attempt); // Exponential backoff
+                                Thread.sleep(500 * attempt); // Reduced exponential backoff
                             }
                         }
                     }
 
                     int count = processedCount.incrementAndGet();
-                    if (count % 5 == 0 || count == linksToProcess.size()) {
+                    if (count % 10 == 0 || count == linksToProcess.size()) { // Changed to log every 10 links
                         System.out.println("Processed " + count + " out of " + linksToProcess.size() + " links");
                     }
                 } catch (Exception e) {
@@ -122,7 +120,7 @@ public class DatePickerAutomationClaude {
 
     private static void getData(String link, WebDriver driver) throws InterruptedException {
         driver.get(link);
-        Thread.sleep(1500); // Give page time to load initially
+        Thread.sleep(500); // Reduced initial load time
 
         try {
             // More robust wait using FluentWait
@@ -132,15 +130,11 @@ public class DatePickerAutomationClaude {
                     .ignoring(NoSuchElementException.class)
                     .ignoring(StaleElementReferenceException.class);
 
-            WebElement karsilastirmaButton = fluentWait.until(new Function<WebDriver, WebElement>() {
-                public WebElement apply(WebDriver driver) {
-                    return driver.findElement(By.xpath("//a[span[text()='Karşılaştırma']]"));
-                }
-            });
+            WebElement karsilastirmaButton = fluentWait.until(driver1 -> driver1.findElement(By.xpath("//a[span[text()='Karşılaştırma']]")));
 
             Actions actions = new Actions(driver);
             actions.moveToElement(karsilastirmaButton).click().perform();
-            Thread.sleep(3000); // Increased wait time after clicking the button
+            Thread.sleep(500); // Reduced wait time after clicking the button
         } catch (Exception ex) {
             System.out.println("Karşılaştırma butonu bulunamadı veya tıklanamadı: " + ex.getMessage());
             throw new RuntimeException("Failed to find or click comparison button", ex);
@@ -452,7 +446,6 @@ public class DatePickerAutomationClaude {
         options.addArguments("--disable-gpu");
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
-
         options.addArguments("--disable-javascript");
         options.addArguments("--disable-plugins");
         options.addArguments("--incognito");
@@ -462,7 +455,6 @@ public class DatePickerAutomationClaude {
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
         return driver;
     }
-
     public static void writeMatchesToExcel() {
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet("Match Results");
