@@ -2,6 +2,7 @@ package flashscore.weeklydatascraping.datepickermackolik;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpStatus;
+import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -25,7 +26,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class DatePickerAutomationV2 {
-    private static final int THREAD_POOL_SIZE = 10;
+    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() - 1;
     private static final CopyOnWriteArrayList<List<String>> allData = new CopyOnWriteArrayList<>();
 
     public static void main(String[] args) throws InterruptedException, IOException {
@@ -160,9 +161,10 @@ public class DatePickerAutomationV2 {
                 System.err.println("HTTP request failed with status code: " + statusCode + " for URL: " + url);
                 return null;
             }
+        } catch (ClientProtocolException e) {
+            throw new RuntimeException(e);
         } catch (IOException e) {
-            System.err.println("Error fetching content from URL: " + url + " - " + e.getMessage());
-            return null;
+            throw new RuntimeException(e);
         }
     }
 
