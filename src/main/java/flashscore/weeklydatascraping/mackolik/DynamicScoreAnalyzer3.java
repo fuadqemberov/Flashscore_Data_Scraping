@@ -223,7 +223,7 @@ public class DynamicScoreAnalyzer3 {
     }
 
     static WebDriver initializeDriver() {
-        System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
+        System.setProperty("webdriver.chrome.driver", "src\\chromee\\chromedriver.exe");
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless");
         return new ChromeDriver(options);
