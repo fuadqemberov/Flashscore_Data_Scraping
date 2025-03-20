@@ -105,6 +105,14 @@
         <version>4.15.0</version>
     </dependency>
 
+    <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
+    <dependency>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>okhttp</artifactId>
+        <version>3.2.0</version>
+    </dependency>
+
+
     <dependency>
         <groupId>org.apache.poi</groupId>
         <artifactId>poi-ooxml</artifactId>
@@ -122,6 +130,44 @@
         <groupId>com.google.code.gson</groupId>
         <artifactId>gson</artifactId>
         <version>2.8.6</version>
+    </dependency>
+
+    <dependency>
+        <groupId>org.jsoup</groupId>
+        <artifactId>jsoup</artifactId>
+        <version>1.15.4</version> <!-- En güncel sürümü kontrol edin -->
+    </dependency>
+
+    <!-- Apache HttpClient -->
+    <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpclient</artifactId>
+        <version>4.5.14</version> <!-- En güncel sürümü kontrol edin -->
+    </dependency>
+
+    <!-- Apache POI (Excel işlemleri için) -->
+    <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi</artifactId>
+        <version>5.2.3</version> <!-- En güncel sürümü kontrol edin -->
+    </dependency>
+    <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>5.2.3</version> <!-- En güncel sürümü kontrol edin -->
+    </dependency>
+
+    <!-- Logging (isteğe bağlı, ancak önerilir) -->
+    <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>1.7.36</version> <!-- En güncel sürümü kontrol edin -->
+    </dependency>
+    <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-simple</artifactId>
+        <version>1.7.36</version> <!-- En güncel sürümü kontrol edin -->
+        <scope>runtime</scope>
     </dependency>
 
 

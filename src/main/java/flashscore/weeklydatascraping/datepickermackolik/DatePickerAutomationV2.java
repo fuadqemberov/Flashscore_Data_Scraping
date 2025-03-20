@@ -53,12 +53,16 @@ public class DatePickerAutomationV2 {
                 for (Future<List<String>> future : futures) {
                     try {
                         List<String> matchData = future.get(30, TimeUnit.SECONDS);
-                        if (matchData != null) {
+                        if (matchData != null && !matchData.isEmpty()) {
                             allData.add(matchData);
                             System.out.println("Data successfully added to allData.");
                         }
-                    } catch (ExecutionException | TimeoutException e) {
-                        System.err.println("Error processing link: " + e.getMessage());
+                    } catch (ExecutionException e) {
+                        System.err.println("Execution error for link: " + e.getCause());
+                    } catch (TimeoutException e) {
+                        System.err.println("Timeout error: Link skipped due to timeout.");
+                    } catch (Exception e) {
+                        System.err.println("Unexpected error: " + e.getMessage());
                     }
                 }
             }
@@ -198,7 +202,7 @@ public class DatePickerAutomationV2 {
 
     public static List<String> readFile() throws IOException {
         List<String> lines = new ArrayList<>();
-        File file = new File("mackolik.txt");
+        File file = new File("mackolik3.txt");
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;

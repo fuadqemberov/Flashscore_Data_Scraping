@@ -21,12 +21,18 @@ public class DynamicScoreAnalyzer3 {
     public static class MatchPattern {
         public String score1;
         public String score2;
+        public String score3;
         public String team1Home;
         public String team1Away;
         public String team2Home;
         public String team2Away;
+        public String team3Home;
+        public String team3Away;
 
-        public MatchPattern(String score1, String score2, String team1Home, String team1Away, String team2Home, String team2Away) {
+        public MatchPattern(String score1, String score2,
+                            String team1Home, String team1Away,
+                            String team2Home, String team2Away,
+                            String score3,String team3Home,String team3Away) {
             this.score1 = score1;
             this.score2 = score2;
             this.team1Home = team1Home;
@@ -86,6 +92,7 @@ public class DynamicScoreAnalyzer3 {
             if (allMatches.size() >= 2) {
                 MatchInfo match1 = allMatches.get(allMatches.size() - 2);
                 MatchInfo match2 = allMatches.get(allMatches.size() - 1);
+                MatchInfo match3 = allMatches.get(allMatches.size() - 3);
 
                 return new MatchPattern(
                         match1.score,
@@ -93,7 +100,10 @@ public class DynamicScoreAnalyzer3 {
                         match1.homeTeam,
                         match1.awayTeam,
                         match2.homeTeam,
-                        match2.awayTeam
+                        match2.awayTeam,
+                        match3.score,
+                        match3.homeTeam,
+                        match3.awayTeam
                 );
             } else {
                 throw new RuntimeException("Son iki maç skoru bulunamadı!");
@@ -223,7 +233,7 @@ public class DynamicScoreAnalyzer3 {
     }
 
     static WebDriver initializeDriver() {
-        System.setProperty("webdriver.chrome.driver", "src\\chromee\\chromedriver.exe");
+        System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless");
         return new ChromeDriver(options);

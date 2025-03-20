@@ -106,7 +106,7 @@ public class OptimizedMultithreadedScoreAnalyzer2 extends DynamicScoreAnalyzer3 
             System.out.println("Aranan skor paterni: " + currentPattern.score1 + " -> " + currentPattern.score2);
             System.out.println("\nGeçmiş yıllarda bu pattern araştırılıyor...\n");
 
-            for (int year = 2023; year >= 2021; year--) {
+            for (int year = 2023; year > 2022; year--) {
                 System.out.println("\n" + year + " Sezonu Analizi:");
                 System.out.println("------------------------");
                 String years = year + "/" + (year + 1);

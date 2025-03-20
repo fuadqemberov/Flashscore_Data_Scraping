@@ -19,18 +19,20 @@ public class TeamIdFinder {
     public static String txt = "team_ids.txt";
 
     static {
-        leagueIdList.addAll(Arrays.asList(
-                "3,4,5,1164","7","8","486","9","12","416","417","5","6"
-                ,"895","13292","111","17","120","24","25","104","105","414","26","106","107"
-                ,"20","21","15","16","458","459","6640","29","4180","594","13411","531","14"
-                ,"709","4716","78","2","1","1708","641","644","110","927","109","802","77"
-                ,"79","9940","19","474","28","739")); // Lig ID'leri
+//        leagueIdList.addAll(Arrays.asList(
+//                "3,4,5,1164","7","8","486","9","12","416","417","5","6"
+//                ,"895","13292","111","17","120","24","25","104","105","414","26","106","107"
+//                ,"20","21","15","16","458","459","6640","29","4180","594","13411","531","14"
+//                ,"709","4716","78","2","1","1708","641","644","110","927","109","802","77"
+//                ,"79","9940","19","474","28","739")); // Lig ID'leri
+
+        leagueIdList.add("67261");
     }
 
     public static void main(String[] args) {
         try {
             for (String leagueId : leagueIdList) {
-                driver.get("https://arsiv.mackolik.com/Puan-Durumu/" + leagueId + "/");
+                driver.get("https://arsiv.mackolik.com/Puan-Durumu/s=" + leagueId + "/");
                 List<WebElement> teamLinks = driver.findElements(By.xpath("//a[contains(@class, 'style3')]"));
 
                 for (WebElement teamLink : teamLinks) {
@@ -54,7 +56,7 @@ public class TeamIdFinder {
     }
 
     static WebDriver initializeDriver() {
-        System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
+        System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless"); // Tarayıcıyı başsız modda çalıştır
         return new ChromeDriver(options);
@@ -71,7 +73,7 @@ public class TeamIdFinder {
         }
     }
 
-    static List<String> readIdsFromFile() throws IOException {
+    public static List<String> readIdsFromFile() throws IOException {
         // Dosyayı okuma
         try (BufferedReader reader = new BufferedReader(new FileReader(txt))) {
             String line = reader.readLine(); // İlk satırı oku
