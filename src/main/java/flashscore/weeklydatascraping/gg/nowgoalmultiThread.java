@@ -80,7 +80,7 @@ public class nowgoalmultiThread {
     }
 
     static WebDriver initializeDriver() {
-        System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
+        System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless"); // Başsız modda çalıştır
         options.addArguments("--disable-gpu");
