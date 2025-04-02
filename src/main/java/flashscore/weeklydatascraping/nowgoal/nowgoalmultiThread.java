@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class nowgoalmultiThread {
     private static final int WAIT_TIME = 2000;
     private static final int PAGE_LOAD_TIMEOUT = 10;
-    private static final String LINK = "https://football.nowgoal29.com/league/";
+    private static final String LINK = "https://football.nowgoal.com/league/";
     private static final String YEAR = "2024-2025/";
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors(); // CPU çekirdek sayısı kadar thread
 //    private static final List<String> LEAGUE_IDS = Arrays.asList(

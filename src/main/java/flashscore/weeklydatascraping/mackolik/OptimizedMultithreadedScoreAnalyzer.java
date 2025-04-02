@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.gg;
+package flashscore.weeklydatascraping.mackolik;
 
 import org.openqa.selenium.WebDriver;
 
@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static flashscore.weeklydatascraping.gg.DynamicScoreAnalyzer.MatchResult.*;
+import static flashscore.weeklydatascraping.mackolik.DynamicScoreAnalyzer.MatchResult.*;
 
 public class OptimizedMultithreadedScoreAnalyzer extends DynamicScoreAnalyzer {
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();

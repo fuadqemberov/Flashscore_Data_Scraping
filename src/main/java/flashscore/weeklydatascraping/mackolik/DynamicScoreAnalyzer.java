@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.gg;
+package flashscore.weeklydatascraping.mackolik;
 
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -14,8 +14,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
-import static flashscore.weeklydatascraping.gg.DynamicScoreAnalyzer.MatchResult.initializeDriver;
 
 public class DynamicScoreAnalyzer {
     private static List<MatchResult> matchResults = new ArrayList<>();

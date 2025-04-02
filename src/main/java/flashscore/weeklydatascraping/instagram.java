@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.gg;
+package flashscore.weeklydatascraping;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
@@ -42,7 +42,7 @@ public class instagram {
 
 
     public static WebDriver getChromeDriver() {
-        System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
+        System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
         if (driverr == null) {
             driverr = new ChromeDriver();
         }
