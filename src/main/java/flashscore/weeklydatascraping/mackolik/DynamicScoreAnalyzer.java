@@ -32,6 +32,7 @@ public class DynamicScoreAnalyzer {
         String homeTeam;
         String awayTeam;
         String score;
+        String previousMatchScore;
         String nextMatchScore;
         String season;
 
@@ -44,28 +45,11 @@ public class DynamicScoreAnalyzer {
 
         @Override
         public String toString() {
-            return String.format("%s - %s: %s vs %s  -> Sonraki Maç: %s",
+            return String.format("%s - %s: %s vs %s  -> Önceki Maç: %s -> Sonraki Maç: %s",
                     season, score, homeTeam, awayTeam,
+                    previousMatchScore != null ? previousMatchScore : "Bilgi Yok",
                     nextMatchScore != null ? nextMatchScore : "Bilgi Yok");
         }
-
-//        public static void main(String[] args) throws InterruptedException {
-//            for(int i=1;i<5;i++) {
-//                MatchPattern currentPattern = findCurrentSeasonLastTwoMatches(i);
-//                System.out.println("Aranan skor paterni: " + currentPattern.score1 + " -> " + currentPattern.score2);
-//                System.out.println("\nGeçmiş yıllarda bu pattern araştırılıyor...\n");
-//
-//                for (int year = 2023; year >= 2021; year--) {
-//                    System.out.println("\n" + year + " Sezonu Analizi:");
-//                    System.out.println("------------------------");
-//                    String years = year + "/" + (year + 1);
-//                    findScorePattern(currentPattern, years,i,driver2);
-//                }
-//            }
-//            driver2.quit();
-//            writeMatchesToExcel();
-//            System.exit(0);
-//        }
 
         public static MatchPattern findCurrentSeasonLastTwoMatches(int id, WebDriver driver) throws InterruptedException {
             String link = "https://arsiv.mackolik.com/Team/Default.aspx?id="+ id +"&season=2024/2025";
@@ -108,9 +92,9 @@ public class DynamicScoreAnalyzer {
             }
         }
 
+
         public static void findScorePattern(MatchPattern pattern, String year, int id, WebDriver driver2) {
             try {
-
                 driver2.get("https://arsiv.mackolik.com/Team/Default.aspx?id="+id+"&season=" + year);
 
                 List<WebElement> matchElements = driver2.findElements(By.cssSelector("tr.row"));
@@ -125,9 +109,22 @@ public class DynamicScoreAnalyzer {
                     if ((currentScore.equals(pattern.score1) && nextScore.equals(pattern.score2))
                             || (currentScore.equals(pattern.score2) && nextScore.equals(pattern.score1))) {
                         String homeTeam = currentRow.findElement(By.cssSelector("td:nth-child(3)")).getText().trim();
-
                         String awayTeam = currentRow.findElement(By.cssSelector("td:nth-child(7)")).getText().trim();
 
+                        // Get preceding match details (if available)
+                        String precedingScore = null;
+                        String precedingHTScore = null;
+                        String precedingHome = null;
+                        String precedingAway = null;
+                        if (i > 0) {
+                            WebElement precedingRow = matchElements.get(i - 1);
+                            precedingScore = precedingRow.findElement(By.cssSelector("td:nth-child(5) b a")).getText().trim();
+                            precedingHTScore = precedingRow.findElement(By.cssSelector("td:nth-child(9)")).getText().trim();
+                            precedingHome = precedingRow.findElement(By.cssSelector("td:nth-child(3)")).getText().trim();
+                            precedingAway = precedingRow.findElement(By.cssSelector("td:nth-child(7)")).getText().trim();
+                        }
+
+                        // Get following match details (if available)
                         String followingScore = null;
                         String followingHTScore = null;
                         String followingHome = null;
@@ -140,8 +137,22 @@ public class DynamicScoreAnalyzer {
                             followingAway = followingRow.findElement(By.cssSelector("td:nth-child(7)")).getText().trim();
                         }
 
-                        MatchResult result = new MatchResult(homeTeam, awayTeam, currentScore,year);
-                        result.nextMatchScore = followingHome + "  " + followingHTScore + " / " + followingScore + "  " + followingAway;
+                        MatchResult result = new MatchResult(homeTeam, awayTeam, currentScore, year);
+
+                        // Add preceding match info to the result object
+                        if (precedingHome != null) {
+                            result.previousMatchScore = precedingHome + "  " + precedingHTScore + " / " + precedingScore + "  " + precedingAway;
+                        } else {
+                            result.previousMatchScore = "Bilgi Yok";
+                        }
+
+                        // Add following match info to the result object
+                        if (followingHome != null) {
+                            result.nextMatchScore = followingHome + "  " + followingHTScore + " / " + followingScore + "  " + followingAway;
+                        } else {
+                            result.nextMatchScore = "Bilgi Yok";
+                        }
+
                         System.out.println(result);
                         matchResults.add(result);
                     }
@@ -151,8 +162,8 @@ public class DynamicScoreAnalyzer {
             }
         }
 
-        static WebDriver initializeDriver() {
-            System.setProperty("webdriver.chrome.driver", "src\\chr\\chromedriver.exe");
+        public static WebDriver initializeDriver() {
+            System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
             ChromeOptions options = new ChromeOptions();
             options.addArguments("--headless"); // Başsız modda çalıştır
             options.addArguments("--disable-gpu");

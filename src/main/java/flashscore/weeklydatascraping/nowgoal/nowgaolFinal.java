@@ -33,7 +33,12 @@ public class nowgaolFinal {
     private static final String BASE_URL = "https://football.nowgoal.com";
     private static final String CURRENT_SEASON = "2024-2025";
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
-    private static final List<String> LEAGUE_IDS = Arrays.asList("39");
+    private static final List<String> LEAGUE_IDS = Arrays.asList(
+            "36", "31", "5", "17", "16", "29", "23", "11", "693",
+            "9", "8", "33", "40", "34", "7", "127", "3", "128",
+            "27", "10", "6", "119", "137", "32", "124", "132",
+            "30", "130", "136", "133", "247", "159", "129","40"
+    );
 
     private static final ConcurrentHashMap<String, List<List<String>>> results = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Map<String, String>> upcomingMatchesByTeam = new ConcurrentHashMap<>();

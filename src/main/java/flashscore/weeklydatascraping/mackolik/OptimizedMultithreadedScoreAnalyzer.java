@@ -2,6 +2,7 @@ package flashscore.weeklydatascraping.mackolik;
 
 import org.openqa.selenium.WebDriver;
 
+import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -9,16 +10,17 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static flashscore.weeklydatascraping.mackolik.DynamicScoreAnalyzer.MatchResult.*;
+import static flashscore.weeklydatascraping.mackolik.TeamIdFinder.readIdsFromFile;
 
 public class OptimizedMultithreadedScoreAnalyzer extends DynamicScoreAnalyzer {
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, IOException {
         ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
         Logger seleniumLogger = Logger.getLogger("org.openqa.selenium");
-        seleniumLogger.setLevel(Level.SEVERE); // Suppresses warnings and lower levels
-        for (int i = 1; i <= 100; i++) {
-            final int currentId = i;
+        seleniumLogger.setLevel(Level.SEVERE);
+        for (String id : readIdsFromFile()) {
+            final int currentId = Integer.parseInt(id);
 
             executor.submit(() -> {
                 WebDriver driver = initializeDriver();
