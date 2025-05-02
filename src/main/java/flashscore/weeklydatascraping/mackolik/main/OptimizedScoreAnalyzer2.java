@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.claude3;
+package flashscore.weeklydatascraping.mackolik.main;
 
 import flashscore.weeklydatascraping.mackolik.TeamIdFinder;
 import org.openqa.selenium.WebDriver;
@@ -7,8 +7,8 @@ import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static flashscore.weeklydatascraping.mackolik.claude3.ModifiedScoreAnalyzer2.MatchPattern;
-import static flashscore.weeklydatascraping.mackolik.claude3.ModifiedScoreAnalyzer2.MatchResult;
+import static flashscore.weeklydatascraping.mackolik.main.ModifiedScoreAnalyzer2.MatchPattern;
+import static flashscore.weeklydatascraping.mackolik.main.ModifiedScoreAnalyzer2.MatchResult;
 
 public class OptimizedScoreAnalyzer2 {
 

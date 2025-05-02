@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.claude2;
+package flashscore.weeklydatascraping.mackolik.main;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
@@ -8,8 +8,10 @@ import org.openqa.selenium.chrome.ChromeOptions;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
-public class DynamicScoreAnalyzerGrok3 {
+public class ModifiedScoreAnalyzer2 {
     public static class MatchPattern {
         public String score1;
         public String score2;
@@ -33,6 +35,16 @@ public class DynamicScoreAnalyzerGrok3 {
                     homeTeam1, score1, awayTeam1,
                     homeTeam2, score2, awayTeam2);
         }
+
+        // Get all team names in the pattern
+        public Set<String> getAllTeams() {
+            Set<String> teams = new HashSet<>();
+            teams.add(homeTeam1);
+            teams.add(awayTeam1);
+            teams.add(homeTeam2);
+            teams.add(awayTeam2);
+            return teams;
+        }
     }
 
     public static class MatchResult {
@@ -51,10 +63,7 @@ public class DynamicScoreAnalyzerGrok3 {
         String patternHome2;
         String patternAway2;
 
-        // Add field for the first match HT score
         String firstMatchHTScore;
-
-        // Add fields for the second match in the pattern
         String secondMatchHomeTeam;
         String secondMatchScore;
         String secondMatchAwayTeam;
@@ -77,11 +86,9 @@ public class DynamicScoreAnalyzerGrok3 {
                     nextMatchScore + " (HT: " + (nextHTScore != null ? nextHTScore : "N/A") + ")" :
                     "Bilgi Yok";
 
-            // First match of the pattern (already stored in homeTeam, score, awayTeam)
             String matchPattern1 = homeTeam + " " + score + " " + awayTeam +
                     " (HT: " + (firstMatchHTScore != null ? firstMatchHTScore : "N/A") + ")";
 
-            // Second match of the pattern
             String matchPattern2 = secondMatchHomeTeam != null ?
                     secondMatchHomeTeam + " " + secondMatchScore + " " + secondMatchAwayTeam +
                             " (HT: " + (secondMatchHTScore != null ? secondMatchHTScore : "N/A") + ")" :
@@ -92,6 +99,27 @@ public class DynamicScoreAnalyzerGrok3 {
                     matchPattern1,
                     matchPattern2,
                     nextMatch);
+        }
+
+        // Check if this match result contains at least one of the original teams playing against the same opponent
+        public boolean containsOriginalTeamVsOpponent(MatchPattern originalPattern) {
+            // Check if first match has a team playing against the same opponent as in the original pattern
+            if ((homeTeam.equals(originalPattern.homeTeam1) && awayTeam.equals(originalPattern.awayTeam1)) ||
+                    (homeTeam.equals(originalPattern.awayTeam1) && awayTeam.equals(originalPattern.homeTeam1)) ||
+                    (homeTeam.equals(originalPattern.homeTeam2) && awayTeam.equals(originalPattern.awayTeam2)) ||
+                    (homeTeam.equals(originalPattern.awayTeam2) && awayTeam.equals(originalPattern.homeTeam2))) {
+                return true;
+            }
+
+            // Check if second match has a team playing against the same opponent as in the original pattern
+            if ((secondMatchHomeTeam.equals(originalPattern.homeTeam1) && secondMatchAwayTeam.equals(originalPattern.awayTeam1)) ||
+                    (secondMatchHomeTeam.equals(originalPattern.awayTeam1) && secondMatchAwayTeam.equals(originalPattern.homeTeam1)) ||
+                    (secondMatchHomeTeam.equals(originalPattern.homeTeam2) && secondMatchAwayTeam.equals(originalPattern.awayTeam2)) ||
+                    (secondMatchHomeTeam.equals(originalPattern.awayTeam2) && secondMatchAwayTeam.equals(originalPattern.homeTeam2))) {
+                return true;
+            }
+
+            return false;
         }
 
         public static MatchPattern findCurrentSeasonLastTwoMatches(int id, WebDriver driver) throws InterruptedException {
@@ -148,7 +176,9 @@ public class DynamicScoreAnalyzerGrok3 {
             }
         }
 
-        public static void findScorePattern(MatchPattern pattern, String year, int id, WebDriver driver2) {
+        public static boolean findScorePattern(MatchPattern pattern, String year, int id, WebDriver driver2, StringBuilder results) {
+            boolean foundMatch = false;
+
             try {
                 driver2.get("https://arsiv.mackolik.com/Team/Default.aspx?id="+id+"&season=" + year);
 
@@ -180,8 +210,6 @@ public class DynamicScoreAnalyzerGrok3 {
                     }
                 }
 
-                System.out.println("İlk lig için bulunan maç sayısı: " + leagueMatches.size());
-
                 for (int i = 0; i < leagueMatches.size() - 1; i++) {
                     WebElement currentRow = leagueMatches.get(i);
                     WebElement nextRow = leagueMatches.get(i + 1);
@@ -202,6 +230,17 @@ public class DynamicScoreAnalyzerGrok3 {
                             String secondMatchHomeTeam = nextRow.findElement(By.cssSelector("td:nth-child(3)")).getText().trim();
                             String secondMatchAwayTeam = nextRow.findElement(By.cssSelector("td:nth-child(7)")).getText().trim();
                             String secondMatchHTScore = nextRow.findElement(By.cssSelector("td:nth-child(9)")).getText().trim();
+
+                            MatchResult result = new MatchResult(homeTeam, awayTeam, currentScore, year);
+
+                            // Set first match HT score
+                            result.firstMatchHTScore = currentHTScore;
+
+                            // Set second match details
+                            result.secondMatchHomeTeam = secondMatchHomeTeam;
+                            result.secondMatchScore = nextScore;
+                            result.secondMatchAwayTeam = secondMatchAwayTeam;
+                            result.secondMatchHTScore = secondMatchHTScore;
 
                             String precedingScore = null;
                             String precedingHTScore = null;
@@ -227,17 +266,6 @@ public class DynamicScoreAnalyzerGrok3 {
                                 followingAway = followingRow.findElement(By.cssSelector("td:nth-child(7)")).getText().trim();
                             }
 
-                            MatchResult result = new MatchResult(homeTeam, awayTeam, currentScore, year);
-
-                            // Set first match HT score
-                            result.firstMatchHTScore = currentHTScore;
-
-                            // Set second match details
-                            result.secondMatchHomeTeam = secondMatchHomeTeam;
-                            result.secondMatchScore = nextScore;
-                            result.secondMatchAwayTeam = secondMatchAwayTeam;
-                            result.secondMatchHTScore = secondMatchHTScore;
-
                             if (precedingHome != null) {
                                 result.previousMatchScore = precedingHome + " " + precedingScore + " " + precedingAway;
                                 result.previousHTScore = precedingHTScore;
@@ -261,7 +289,11 @@ public class DynamicScoreAnalyzerGrok3 {
                             result.patternHome2 = pattern.homeTeam2;
                             result.patternAway2 = pattern.awayTeam2;
 
-                            System.out.println(result);
+                            // Only print the result if one of the original teams plays against the same opponent
+                            if (result.containsOriginalTeamVsOpponent(pattern)) {
+                                results.append(result).append("\n\n");
+                                foundMatch = true;
+                            }
                         }
                     } catch (Exception e) {
                         System.err.println("Maç analizi sırasında hata: " + e.getMessage());
@@ -272,9 +304,11 @@ public class DynamicScoreAnalyzerGrok3 {
                 System.err.println(year + " yılı analizi sırasında hata: " + e.getMessage());
                 e.printStackTrace();
             }
+
+            return foundMatch;
         }
 
-        static WebDriver initializeDriver() {
+        public static WebDriver initializeDriver() {
             System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
             ChromeOptions options = new ChromeOptions();
             options.addArguments("--headless");
@@ -285,36 +319,41 @@ public class DynamicScoreAnalyzerGrok3 {
             WebDriver driver = new ChromeDriver(options);
             return driver;
         }
+    }
 
-//        private static void createHeaderRow(Sheet sheet) {
-//            Row headerRow = sheet.createRow(0);
-//            String[] headers = {"Result"};
-//            for (int i = 0; i < headers.length; i++) {
-//                headerRow.createCell(i).setCellValue(headers[i]);
-//            }
-//        }
-//
-//        private static void fillDataRows(Sheet sheet) {
-//            int rowNum = 1;
-//            for (int i = 0; i < matchResults.size(); i++) {
-//                Row row = sheet.createRow(rowNum++);
-//                row.createCell(i).setCellValue(matchResults.get(i).toString());
-//            }
-//        }
-//
-//        public static void writeMatchesToExcel() {
-//            try (Workbook workbook = new XSSFWorkbook()) {
-//                Sheet sheet = workbook.createSheet("Match Results");
-//                createHeaderRow(sheet);
-//                fillDataRows(sheet);
-//
-//                try (FileOutputStream fileOut = new FileOutputStream("wnn.xlsx")) {
-//                    workbook.write(fileOut);
-//                    System.out.println("Excel file created successfully!");
-//                }
-//            } catch (IOException e) {
-//                System.err.println("Error while writing to Excel file: " + e.getMessage());
-//            }
-//        }
+    public static void main(String[] args) throws InterruptedException {
+        // Sample usage
+        try {
+            WebDriver driver = MatchResult.initializeDriver();
+            MatchPattern currentPattern = MatchResult.findCurrentSeasonLastTwoMatches(195, driver);
+
+            // Store the pattern info
+            String patternInfo = "Aranan skor paterni:\n" + currentPattern;
+            boolean foundAnyMatches = false;
+            StringBuilder results = new StringBuilder();
+
+            for (int year = 2023; year >= 2021; year--) {
+                String yearInfo = "\n" + year + " Sezonu Analizi:\n------------------------";
+                String years = year + "/" + (year + 1);
+
+                boolean foundMatchesThisYear = MatchResult.findScorePattern(currentPattern, years, 195, driver, results);
+
+                if (foundMatchesThisYear) {
+                    results.insert(results.length() - (results.length() > 0 ? 1 : 0), yearInfo + "\n");
+                    foundAnyMatches = true;
+                }
+            }
+
+            // Only print the pattern and results if we found matches
+            if (foundAnyMatches) {
+                System.out.println(patternInfo);
+                System.out.println(results.toString());
+            }
+
+            driver.quit();
+        } catch (Exception e) {
+            System.err.println("Hata: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
