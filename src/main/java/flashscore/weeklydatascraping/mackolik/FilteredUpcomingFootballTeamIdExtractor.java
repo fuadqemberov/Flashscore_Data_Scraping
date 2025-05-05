@@ -10,9 +10,9 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList; // Sıralama için eklendi
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator; // Sıralama için eklendi
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -20,7 +20,7 @@ import java.util.Set;
 
 import static flashscore.weeklydatascraping.mackolik.TeamIdFinder.initializeDriver;
 
-public class FilteredUpcomingFootballTeamIdExtractor { // Sınıf adı güncellendi
+public class FilteredUpcomingFootballTeamIdExtractor {
     public static Set<String> upcomingFootballTeamIds = new HashSet<>();
     public static String txt = "team_ids.txt";
 
@@ -46,6 +46,31 @@ public class FilteredUpcomingFootballTeamIdExtractor { // Sınıf adı güncelle
                 Thread.sleep(500); // Ekstra küçük bekleme
             } catch (Exception e) { // Daha genel hata yakalama
                 System.out.println("Çerez kabul butonu ile ilgili işlem yapılamadı veya zaten yoktu.");
+                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            }
+
+            // YENİ: Önce sağa sonra sola tıklamak için date picker'ı işlem yap
+            try {
+                System.out.println("Date picker işlemleri başlıyor...");
+
+                // Sağ ok elementini bul ve tıkla
+                WebElement rightArrow = wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector(".date-right-coll")));
+                System.out.println("Sağ ok elementine tıklanıyor...");
+                js.executeScript("arguments[0].click();", rightArrow);
+                Thread.sleep(1000); // İşlemin tamamlanması için bekle
+                System.out.println("Sağ ok elementine tıklandı");
+
+                // Sol ok elementini bul ve tıkla
+                WebElement leftArrow = wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector(".date-left-coll")));
+                System.out.println("Sol ok elementine tıklanıyor...");
+                js.executeScript("arguments[0].click();", leftArrow);
+                Thread.sleep(1000); // İşlemin tamamlanması için bekle
+                System.out.println("Sol ok elementine tıklandı");
+
+                System.out.println("Date picker işlemleri tamamlandı.");
+            } catch (Exception e) {
+                System.err.println("Date picker işlemleri sırasında hata oluştu: " + e.getMessage());
+                e.printStackTrace();
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             }
 
