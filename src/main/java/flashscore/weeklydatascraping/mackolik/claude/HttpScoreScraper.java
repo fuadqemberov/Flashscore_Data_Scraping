@@ -52,45 +52,43 @@ public class HttpScoreScraper {
         }
 
         Document doc = Jsoup.parse(html);
-        Element tableBody = doc.selectFirst("#tblFixture > tbody"); // Use Jsoup selector
+        Element tableBody = doc.selectFirst("#tblFixture > tbody");
 
         if (tableBody == null) {
             log.warn("Fixture table body not found for team ID {} in season {}", teamId, CURRENT_SEASON);
             throw new RuntimeException("Fixture table not found for team ID: " + teamId);
         }
 
-
         List<String> allScores = new ArrayList<>();
         List<String> allHomeTeams = new ArrayList<>();
         List<String> allAwayTeams = new ArrayList<>();
-        String teamName = "Unknown"; // Try to get team name from page title or header
+        String nextHomeTeam = null;
+        String nextAwayTeam = null;
+        String teamName = "Unknown";
 
         try {
-            Element teamNameElement = doc.selectFirst("title"); // Get title which usually contains team name
+            Element teamNameElement = doc.selectFirst("title");
             if (teamNameElement != null) {
-                // Extract team name (this might need adjustment based on actual title format)
                 String title = teamNameElement.text();
-                teamName = title.split("-")[0].trim(); // Example extraction
+                teamName = title.split("-")[0].trim();
             }
         } catch (Exception e) {
             log.warn("Could not extract team name for ID {}", teamId);
         }
 
-
-        Elements rows = tableBody.select("tr"); // Select all rows within the tbody
+        Elements rows = tableBody.select("tr");
+        boolean foundUnplayed = false;
 
         for (Element row : rows) {
-            // Check if it's a header/separator row (like the one with 'sportsevent')
             if (row.selectFirst("td[itemprop=sportsevent]") != null) {
-                log.debug("Found 'sportsevent' row, stopping score collection for team {}", teamId);
-                break; // Stop if we hit the future fixtures marker
+                log.debug("Found 'sportsevent' row, stopping processing for team {}", teamId);
+                break;
             }
-            if (row.hasClass("competition")) { // Skip competition header rows
+            if (row.hasClass("competition")) {
                 continue;
             }
 
             try {
-                // Use more specific selectors if needed, these match the original Selenium ones
                 Element scoreElement = row.selectFirst("td:nth-child(5) b a");
                 Element homeTeamElement = row.selectFirst("td:nth-child(3)");
                 Element awayTeamElement = row.selectFirst("td:nth-child(7)");
@@ -100,27 +98,25 @@ public class HttpScoreScraper {
                     String homeTeam = homeTeamElement.text().trim();
                     String awayTeam = awayTeamElement.text().trim();
 
-                    // Check if the score is valid (not empty, not 'v' or other placeholders)
-                    if (!score.isEmpty() && !score.equalsIgnoreCase("v") && score.contains("-")) {
+                    if (!foundUnplayed && !score.isEmpty() && !score.equalsIgnoreCase("v") && score.contains("-")) {
                         allScores.add(score);
                         allHomeTeams.add(homeTeam);
                         allAwayTeams.add(awayTeam);
                         log.trace("Added match: {} {} {}", homeTeam, score, awayTeam);
-                    } else {
-                        log.debug("Found non-played match or invalid score '{}', stopping score collection for team {}.", score, teamId);
-                        break; // Stop processing scores if a match hasn't been played or score is invalid
+                    } else if (!foundUnplayed) {
+                        nextHomeTeam = homeTeam;
+                        nextAwayTeam = awayTeam;
+                        foundUnplayed = true;
+                        log.debug("Found next unplayed match: {} vs {}", nextHomeTeam, nextAwayTeam);
+                        break;
                     }
                 } else {
-                    // This might be a row without match data, log or ignore
                     log.trace("Skipping row without expected match data elements: {}", row.html());
                 }
             } catch (Exception e) {
-                // Log error parsing a specific row but continue if possible
                 log.warn("Error parsing a match row for team {}: {}. Row HTML: {}", teamId, e.getMessage(), row.html());
-                // Depending on the error, you might want to `break` or `continue`
             }
         }
-
 
         if (allScores.size() >= 2) {
             int lastIndex = allScores.size() - 1;
@@ -132,7 +128,7 @@ public class HttpScoreScraper {
             String away2 = allAwayTeams.get(lastIndex);
 
             log.info("Found last two matches for team ID {}: {} vs {} ({}), {} vs {} ({})", teamId, home1, away1, score1, home2, away2, score2);
-            return new MatchPattern(score1, score2, home1, away1, home2, away2, teamName); // Include team name
+            return new MatchPattern(score1, score2, home1, away1, home2, away2, teamName, nextHomeTeam, nextAwayTeam);
         } else {
             log.warn("Could not find at least two completed match scores for team ID {} in season {}", teamId, CURRENT_SEASON);
             throw new RuntimeException("Son iki maç skoru bulunamadı for team ID: " + teamId + "! Found: " + allScores.size());

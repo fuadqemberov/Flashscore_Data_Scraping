@@ -12,8 +12,12 @@ class MatchPattern {
     public String homeTeam2;
     public String awayTeam2;
     public String teamName; // Add team name for context in results
+    public String nextHomeTeam; // Added for next unplayed match
+    public String nextAwayTeam; // Added for next unplayed match
 
-    public MatchPattern(String score1, String score2, String homeTeam1, String awayTeam1, String homeTeam2, String awayTeam2, String teamName) {
+    public MatchPattern(String score1, String score2, String homeTeam1, String awayTeam1,
+                        String homeTeam2, String awayTeam2, String teamName,
+                        String nextHomeTeam, String nextAwayTeam) {
         this.score1 = score1;
         this.score2 = score2;
         this.homeTeam1 = homeTeam1;
@@ -21,13 +25,20 @@ class MatchPattern {
         this.homeTeam2 = homeTeam2;
         this.awayTeam2 = awayTeam2;
         this.teamName = teamName;
+        this.nextHomeTeam = nextHomeTeam;
+        this.nextAwayTeam = nextAwayTeam;
     }
 
     @Override
     public String toString() {
-        return String.format("%s vs %s -> %s\n%s vs %s -> %s",
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("%s vs %s -> %s\n%s vs %s -> %s",
                 homeTeam1, awayTeam1, score1,
-                homeTeam2, awayTeam2, score2);
+                homeTeam2, awayTeam2, score2));
+        if (nextHomeTeam != null && nextAwayTeam != null) {
+            sb.append("\n").append(nextHomeTeam).append(" vs ").append(nextAwayTeam).append(" -> Henüz oynanmadı");
+        }
+        return sb.toString();
     }
 
     // Get all team names in the pattern - Keep as is

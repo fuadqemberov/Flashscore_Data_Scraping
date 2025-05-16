@@ -36,7 +36,7 @@ public class HttpMultiThreadedAnalyzer {
                 // 1. Find the current season's pattern
                 MatchPattern currentPattern = HttpScoreScraper.findCurrentSeasonLastTwoMatches(httpClient, teamId);
                 if (currentPattern == null) {
-                    log.warn("Could not find current pattern for team ID: {}", teamId);
+                    log.warn("Could not find  current pattern for team ID: {}", teamId);
                     return null; // Skip if no current pattern
                 }
 
