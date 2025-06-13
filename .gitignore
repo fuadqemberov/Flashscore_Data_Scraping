@@ -22,3 +22,21 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# IDE specific files
+.idea/
+*.iml
+
+# Maven target directory
+target/
+
+# Configuration files (specific to this project, assuming they contain local paths or credentials)
+# If there are .properties files that SHOULD be in the repo, list them with ! or be more specific.
+# For this project, we assume config files are local.
+mackolik_config.properties
+nowgoal_config.properties
+
+# Output files
+*.csv
+*.xlsx
+team_ids.txt

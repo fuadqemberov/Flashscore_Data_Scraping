@@ -10,25 +10,36 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TeamIdFinder {
 
+    private static final String CONFIG_FILE = "mackolik_config.properties";
+    private static Properties properties = new Properties();
+    private static final Logger logger = LoggerFactory.getLogger(TeamIdFinder.class);
     static List<String> teamIdList = new ArrayList<>();
     static List<String> leagueIdList = new ArrayList<>();
-    static WebDriver driver = initializeDriver();
-    public static String txt = "team_ids.txt";
+    static WebDriver driver; // Initialize after properties are loaded
+    public static String txt; // Will be loaded from properties
 
-//    static {
-//        leagueIdList.addAll(Arrays.asList(
-//                "3,4,5,1164","7","8","486","9","12","416","417","5","6"
-//                ,"895","13292","111","17","120","24","25","104","105","414","26","106","107"
-//                ,"20","21","15","16","458","459","6640","29","4180","594","13411","531","14"
-//                ,"709","4716","78","2","1","1708","641","644","110","927","109","802","77"
-//                ,"79","9940","19","474","28","739"));
-//    }
     static {
-        leagueIdList.addAll(Arrays.asList(
-               "67483"));
+        try (FileInputStream fis = new FileInputStream(CONFIG_FILE)) {
+            properties.load(fis);
+            logger.info("{} dosyası başarıyla yüklendi.", CONFIG_FILE);
+        } catch (IOException e) {
+            logger.error("{} dosyası yüklenirken hata oluştu.", CONFIG_FILE, e);
+            // Consider re-throwing or exiting if config is critical
+        }
+
+        String leagueIdsStr = properties.getProperty("league_ids", "67483"); // Default if not in file
+        leagueIdList.addAll(Arrays.asList(leagueIdsStr.split(",")));
+
+        txt = properties.getProperty("team_ids_file", "team_ids.txt"); // Default if not in file
+
+        // Initialize WebDriver after loading properties, especially if webdriver_path is needed here
+        driver = initializeDriver();
     }
 
     public static void main(String[] args) {
@@ -38,61 +49,100 @@ public class TeamIdFinder {
     public static void proccess() {
         try {
             for (String leagueId : leagueIdList) {
-                String url1 = "https://arsiv.mackolik.com/Puan-Durumu/" + leagueId + "/";
-                String url2 = "https://arsiv.mackolik.com/Puan-Durumu/s=" + leagueId + "/";
-                driver.get(url1 + leagueId + "/");
+                String baseUrl = properties.getProperty("mackolik_arsiv_base_url", "https://arsiv.mackolik.com");
+                String url1 = baseUrl + "/Puan-Durumu/" + leagueId + "/";
+                String url2 = baseUrl + "/Puan-Durumu/s=" + leagueId + "/";
+                driver.get(url1); // Removed redundant leagueId concatenation
                 List<WebElement> teamLinks = driver.findElements(By.xpath("//a[contains(@class, 'style3')]"));
+                logger.debug("{} URL'sinden {} takım linki bulundu.", url1, teamLinks.size());
 
                 // Eğer hiçbir takım bulunamadıysa, alternatif URL'yi dene
                 if (teamLinks.isEmpty()) {
+                    logger.info("{} için takım bulunamadı, alternatif URL deneniyor: {}", leagueId, url2);
                     driver.get(url2);
                     teamLinks = driver.findElements(By.xpath("//a[contains(@class, 'style3')]"));
+                    logger.debug("{} URL'sinden {} takım linki bulundu.", url2, teamLinks.size());
                 }
 
                 for (WebElement teamLink : teamLinks) {
-                    // Takım ID'sini href attribute'undan al
                     String href = teamLink.getAttribute("href");
-                    String teamId = href.split("/")[4]; // ID href içindeki 4. segment
-
-                    teamIdList.add(teamId);
+                    if (href != null && href.contains("/Team/Default.aspx?id=")) {
+                        try {
+                            String teamId = href.split("id=")[1].split("&")[0]; // More robust parsing
+                            if (!teamIdList.contains(teamId)) { // Avoid duplicates
+                                teamIdList.add(teamId);
+                                logger.trace("Takım ID eklendi: {}", teamId);
+                            }
+                        } catch (Exception e) {
+                            logger.warn("Takım ID'si parse edilirken hata oluştu. Href: {}", href, e);
+                        }
+                    } else {
+                        logger.warn("Geçersiz takım linki formatı: {}", href);
+                    }
                 }
             }
             writeIdsToFile();
+            logger.info("Tüm ligler için takım ID'leri işlendi. Toplam {} ID bulundu.", teamIdList.size());
 
+        } catch (org.openqa.selenium.WebDriverException wde) {
+            logger.error("TeamIdFinder.proccess içinde WebDriver hatası oluştu.", wde);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("TeamIdFinder.proccess içinde beklenmedik bir hata oluştu.", e);
         } finally {
-            driver.quit();
+            if (driver != null) {
+                driver.quit();
+                logger.info("TeamIdFinder WebDriver kapatıldı.");
+            }
         }
     }
 
     static WebDriver initializeDriver() {
-        System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
+        logger.info("TeamIdFinder için WebDriver başlatılıyor...");
+        System.setProperty("webdriver.chrome.driver", properties.getProperty("webdriver_path", "src\\chrome\\chromedriver.exe"));
         ChromeOptions options = new ChromeOptions();
-        options.addArguments("--headless"); // Tarayıcıyı başsız modda çalıştır
-        return new ChromeDriver(options);
+        options.addArguments("--headless");
+        options.addArguments("--disable-gpu");
+        options.addArguments("--no-sandbox");
+        try {
+            WebDriver newDriver = new ChromeDriver(options);
+            logger.info("TeamIdFinder WebDriver başarıyla başlatıldı.");
+            return newDriver;
+        } catch (Exception e) {
+            logger.error("TeamIdFinder WebDriver başlatılırken hata.", e);
+            throw new RuntimeException("TeamIdFinder WebDriver başlatılamadı", e);
+        }
     }
 
     static void writeIdsToFile() {
+        if (txt == null || txt.isEmpty()) {
+            logger.error("Takım ID'leri dosya adı (team_ids_file) yapılandırmada belirtilmemiş veya boş.");
+            return;
+        }
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(txt))) {
-            // ID'leri virgülle birleştirip dosyaya yaz
-            String ids = String.join(", ", teamIdList);
+            String ids = String.join(",", teamIdList); // Virgülle birleştir, boşluksuz
             writer.write(ids);
-            System.out.println("Takım ID'leri dosyaya yazıldı: " + txt);
+            logger.info("Takım ID'leri dosyaya yazıldı: {}. Toplam {} ID.", txt, teamIdList.size());
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.error("{} dosyasına takım ID'leri yazılırken hata oluştu.", txt, e);
         }
     }
 
-    public static List<String> readIdsFromFile() throws IOException {
-        // Dosyayı okuma
-        try (BufferedReader reader = new BufferedReader(new FileReader(txt))) {
-            String line = reader.readLine(); // İlk satırı oku
+    public static List<String> readIdsFromFile(Properties config) throws IOException { // Added Properties config
+        String teamIdsFilePath = config.getProperty("team_ids_file", "team_ids.txt");
+        logger.debug("{} dosyasından takım ID'leri okunuyor.", teamIdsFilePath);
+        try (BufferedReader reader = new BufferedReader(new FileReader(teamIdsFilePath))) {
+            String line = reader.readLine();
             if (line != null && !line.isEmpty()) {
-                // Virgülle ayrılmış ID'leri listeye dönüştür
-                return Arrays.asList(line.split(",\\s*")); // Virgül ve boşluklara göre böl
+                List<String> ids = Arrays.asList(line.split(",\\s*"));
+                logger.info("{} dosyasından {} takım ID'si okundu.", teamIdsFilePath, ids.size());
+                return ids;
+            } else {
+                logger.info("{} dosyası boş veya okunamadı.", teamIdsFilePath);
+                return List.of();
             }
+        } catch (IOException e) {
+            logger.error("{} dosyasını okurken hata oluştu.", teamIdsFilePath, e);
+            throw e;
         }
-        return List.of(); // Boş liste döndür
     }
 }
