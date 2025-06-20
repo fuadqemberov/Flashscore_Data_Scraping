@@ -19,6 +19,8 @@ import java.util.List;
 
 public class MackolikIdToFile {
 
+    private static String LEAGUE_ID = "27";
+
     public static void main(String[] args) {
         // WebDriver kurulumu
         WebDriverManager.chromedriver().setup();
@@ -35,7 +37,7 @@ public class MackolikIdToFile {
 
         try {
             // URL'ye git
-            String url = "https://arsiv.mackolik.com/Standings/Default.aspx?sId=70184";
+            String url = "https://arsiv.mackolik.com/Puan-Durumu/"+LEAGUE_ID+"/";
             System.out.println("Selenium ile sayfaya gidiliyor: " + url);
             driver.get(url);
 
