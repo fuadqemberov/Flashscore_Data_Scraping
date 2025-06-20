@@ -1,6 +1,9 @@
 package flashscore.weeklydatascraping.mackolik;
 
+import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.*;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
@@ -25,10 +28,17 @@ public class FilteredUpcomingFootballTeamIdExtractor {
     public static String txt = "team_ids.txt";
 
     public static void main(String[] args) {
-        WebDriver driver = null;
+        WebDriverManager.chromedriver().setup();
+
+        // Tarayıcı ayarları
+        ChromeOptions options = new ChromeOptions();
+        options.addArguments("--headless");
+        options.addArguments("--disable-gpu");
+        options.addArguments("--window-size=1920,1080");
+
+        WebDriver driver = new ChromeDriver(options);
 
         try {
-            driver = initializeDriver();
             driver.manage().window().maximize();
             driver.get("https://arsiv.mackolik.com/Canli-Sonuclar");
 

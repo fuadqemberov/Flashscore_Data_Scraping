@@ -1,5 +1,6 @@
 package flashscore.weeklydatascraping.mackolik;
 
+import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -36,6 +37,7 @@ public class TeamIdFinder {
     }
 
     public static void proccess() {
+
         try {
             for (String leagueId : leagueIdList) {
                 String url1 = "https://arsiv.mackolik.com/Puan-Durumu/" + leagueId + "/";
@@ -67,10 +69,15 @@ public class TeamIdFinder {
     }
 
     static WebDriver initializeDriver() {
-        System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
+        WebDriverManager.chromedriver().setup();
+        // Tarayıcı ayarları
         ChromeOptions options = new ChromeOptions();
-        options.addArguments("--headless"); // Tarayıcıyı başsız modda çalıştır
-        return new ChromeDriver(options);
+        options.addArguments("--headless");
+        options.addArguments("--disable-gpu");
+        options.addArguments("--window-size=1920,1080");
+
+        WebDriver driver = new ChromeDriver(options);
+        return  driver;
     }
 
     static void writeIdsToFile() {
