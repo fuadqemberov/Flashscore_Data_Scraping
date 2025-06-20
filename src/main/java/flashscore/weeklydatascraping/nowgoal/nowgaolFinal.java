@@ -1,5 +1,6 @@
 package flashscore.weeklydatascraping.nowgoal;
 
+import io.github.bonigarcia.wdm.WebDriverManager;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -139,14 +140,15 @@ public class nowgaolFinal {
 
     static WebDriver initializeDriver() {
         System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
+        WebDriverManager.chromedriver().setup();
+
+        // Tarayıcı ayarları
         ChromeOptions options = new ChromeOptions();
-        options.addArguments("--headless"); // Başsız modda çalıştır
+        options.addArguments("--headless");
         options.addArguments("--disable-gpu");
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--window-size=1920,1080");
 
         WebDriver driver = new ChromeDriver(options);
-        driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(PAGE_LOAD_TIMEOUT));
         return driver;
     }
 
