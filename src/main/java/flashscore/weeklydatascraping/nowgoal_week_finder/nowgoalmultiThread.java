@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.nowgoal;
+package flashscore.weeklydatascraping.nowgoal_week_finder;
 
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;

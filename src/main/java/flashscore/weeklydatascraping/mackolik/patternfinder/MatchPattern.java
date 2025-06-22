@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.claude;
+package flashscore.weeklydatascraping.mackolik.patternfinder;
 
 import java.util.HashSet;
 import java.util.Set;

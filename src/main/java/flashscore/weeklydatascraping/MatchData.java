@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.studio2;
+package flashscore.weeklydatascraping;
 
 public class MatchData {
     String date;
@@ -7,6 +7,7 @@ public class MatchData {
     String ftScore;
     String htScore;
     String comebackType = "YOK"; // "1/2", "2/1", veya "YOK"
+
     // Verileri tek bir string olarak formatlamak için yardımcı metod
     @Override
     public String toString() {

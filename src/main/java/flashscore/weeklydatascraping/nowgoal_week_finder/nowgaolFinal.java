@@ -1,5 +1,6 @@
-package flashscore.weeklydatascraping.nowgoal;
+package flashscore.weeklydatascraping.nowgoal_week_finder;
 
+import io.github.bonigarcia.wdm.WebDriverManager;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -18,22 +19,30 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class nowgoalV2 {
+public class nowgaolFinal {
     private static final int WAIT_TIME = 2000;
     private static final int PAGE_LOAD_TIMEOUT = 10;
     private static final String BASE_URL = "https://football.nowgoal.com";
     private static final String CURRENT_SEASON = "2024-2025";
-    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors(); // CPU çekirdek sayısı kadar thread
-    private static final List<String> LEAGUE_IDS = Arrays.asList("36","37");
+    private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
+    private static final List<String> LEAGUE_IDS = Arrays.asList(
+            "36", "31", "5", "17", "16", "29", "23", "11", "693",
+            "9", "8", "33", "40", "34", "7", "127", "3", "128",
+            "27", "10", "6", "119", "137", "32", "124", "132",
+            "30", "130", "136", "133", "247", "159", "129","40"
+    );
 
     private static final ConcurrentHashMap<String, List<List<String>>> results = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Map<String, String>> upcomingMatchesByTeam = new ConcurrentHashMap<>();
     private static final AtomicInteger completedTasks = new AtomicInteger(0);
 
     static class LeagueInfo {
@@ -86,7 +95,16 @@ public class nowgoalV2 {
                     try {
                         LeagueInfo leagueInfo = determineLeagueInfo(driver, leagueId, CURRENT_SEASON);
                         if (leagueInfo != null) {
-                            List<List<String>> leagueResults = scrapeLeagueData(driver, leagueId, leagueInfo);
+                            // Önce takım listesini ve hafta numarasını al
+                            List<String> teamList = getTeamList(driver, leagueId, leagueInfo);
+                            String week = findWeekNum(driver, leagueId, leagueInfo);
+
+                            // Oynanacak maçları topla
+                            Map<String, String> upcomingMatches = getUpcomingMatches(driver, leagueId, leagueInfo);
+                            upcomingMatchesByTeam.put(leagueId, upcomingMatches);
+
+                            // Geçmiş maç verilerini topla
+                            List<List<String>> leagueResults = scrapeLeagueData(driver, leagueId, teamList, week, upcomingMatches, leagueInfo);
                             results.put(leagueId, leagueResults);
 
                             int completed = completedTasks.incrementAndGet();
@@ -122,14 +140,15 @@ public class nowgoalV2 {
 
     static WebDriver initializeDriver() {
         System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
+        WebDriverManager.chromedriver().setup();
+
+        // Tarayıcı ayarları
         ChromeOptions options = new ChromeOptions();
-        options.addArguments("--headless"); // Başsız modda çalıştır
+        options.addArguments("--headless");
         options.addArguments("--disable-gpu");
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--window-size=1920,1080");
 
         WebDriver driver = new ChromeDriver(options);
-        driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(PAGE_LOAD_TIMEOUT));
         return driver;
     }
 
@@ -147,7 +166,7 @@ public class nowgoalV2 {
             System.out.println("League " + leagueId + " identified as: subleague");
             return new LeagueInfo("subleague", "/subleague/", seasonSlug, true);
         } catch (Exception e) {
-            System.err.println("Error checking subleague type for " + leagueId + ": " + e.getMessage());
+            System.out.println("League " + leagueId + " check subleague failed (Timeout). Trying league type...");
         }
 
         // 2. League formatını dene
@@ -166,14 +185,45 @@ public class nowgoalV2 {
         return null;
     }
 
-    private static List<List<String>> scrapeLeagueData(WebDriver driver, String leagueId, LeagueInfo leagueInfo) {
+    private static Map<String, String> getUpcomingMatches(WebDriver driver, String leagueId, LeagueInfo leagueInfo) {
+        Map<String, String> upcomingMatchesByTeam = new HashMap<>();
+        try {
+            // Liga sayfasına git
+            driver.get(leagueInfo.getCurrentSeasonBaseUrl(leagueId));
+            Thread.sleep(WAIT_TIME);
+
+            // Oynanmamış maçları bul
+            List<WebElement> matchRows = driver.findElements(By.xpath("//tr[contains(@id, '') and .//div[contains(@class, 'point') and text()='-']]"));
+
+            for (WebElement row : matchRows) {
+                try {
+                    String homeTeam = row.findElement(By.xpath(".//td[3]/a")).getText();
+                    String awayTeam = row.findElement(By.xpath(".//td[5]/a")).getText();
+                    String matchup = homeTeam + " - " + awayTeam;
+
+                    // Her iki takım için de maçı kaydet
+                    upcomingMatchesByTeam.put(homeTeam, matchup);
+                    upcomingMatchesByTeam.put(awayTeam, matchup);
+
+                    System.out.println("Added upcoming match: " + matchup);
+                } catch (Exception e) {
+                    System.err.println("Error processing upcoming match row: " + e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error fetching upcoming matches for league " + leagueId + ": " + e.getMessage());
+            e.printStackTrace();
+        }
+        return upcomingMatchesByTeam;
+    }
+
+    private static List<List<String>> scrapeLeagueData(WebDriver driver, String leagueId,
+                                                       List<String> teamList, String week,
+                                                       Map<String, String> upcomingMatches, LeagueInfo leagueInfo) {
         List<List<String>> leagueResults = new ArrayList<>();
         try {
-            List<String> teamList = getTeamList(driver, leagueId, leagueInfo);
-            String week = findWeekNum(driver, leagueId, leagueInfo);
-
             for (int year = 2023; year > 2019; year--) {
-                scrapeYearData(driver, leagueId, year, week, teamList, leagueResults, leagueInfo);
+                scrapeYearData(driver, leagueId, year, week, teamList, leagueResults, upcomingMatches, leagueInfo);
             }
         } catch (Exception e) {
             System.err.println("Error scraping league " + leagueId + ": " + e.getMessage());
@@ -216,7 +266,8 @@ public class nowgoalV2 {
 
     private static void scrapeYearData(WebDriver driver, String id, int year,
                                        String week, List<String> teamList,
-                                       List<List<String>> results, LeagueInfo leagueInfo) throws InterruptedException {
+                                       List<List<String>> results,
+                                       Map<String, String> upcomingMatches, LeagueInfo leagueInfo) throws InterruptedException {
         String link = leagueInfo.getHistoricalSeasonUrl(id, year);
         driver.get(link);
         Thread.sleep(WAIT_TIME);
@@ -235,15 +286,18 @@ public class nowgoalV2 {
                 catch (Exception e) {
                     continue;
                 }
+
+                String upcomingMatch = upcomingMatches.getOrDefault(teamName, "");
+
                 List<String> matchData = Arrays.asList(
                         String.valueOf(year),
                         teamName,
                         getHalfScore(teamRow) + " / " + getMatchScore(teamRow),
                         week,
-                        getFullTeamNames(teamRow)
+                        getFullTeamNames(teamRow),
+                        upcomingMatch
                 );
                 results.add(matchData);
-
             }
         } catch (Exception e) {
             System.err.println("Error scraping data for year " + year + ": " + e.getMessage());
@@ -301,7 +355,7 @@ public class nowgoalV2 {
 
     private static void createHeaderRow(Sheet sheet) {
         Row headerRow = sheet.createRow(0);
-        String[] headers = {"Year", "Main Team", "Result ht / ft", "Week", "Teams"};
+        String[] headers = {"Year", "Main Team", "Result ht / ft", "Week", "Teams", "Upcoming Match"};
         for (int i = 0; i < headers.length; i++) {
             headerRow.createCell(i).setCellValue(headers[i]);
         }

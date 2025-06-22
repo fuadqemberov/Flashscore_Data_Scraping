@@ -1,6 +1,6 @@
 package flashscore.weeklydatascraping.mackolik.main;
 
-import flashscore.weeklydatascraping.mackolik.TeamIdFinder;
+import flashscore.weeklydatascraping.mackolik.patternfinder.TeamIdFinder;
 import org.openqa.selenium.WebDriver;
 
 import java.io.IOException;

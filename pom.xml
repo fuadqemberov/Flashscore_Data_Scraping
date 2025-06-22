@@ -57,6 +57,12 @@
         <version>2.11.0</version>
     </dependency>
 
+    <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>5.2.3</version>
+    </dependency>
+
     <!-- SLF4J API for logging -->
     <dependency>
         <groupId>org.slf4j</groupId>

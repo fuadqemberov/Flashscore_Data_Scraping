@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik;
+package flashscore.weeklydatascraping.mackolik.patternfinder;
 
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.*;
@@ -19,9 +19,6 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
-
-import static flashscore.weeklydatascraping.mackolik.TeamIdFinder.initializeDriver;
 
 public class FilteredUpcomingFootballTeamIdExtractor {
     public static Set<String> upcomingFootballTeamIds = new HashSet<>();
@@ -83,6 +80,22 @@ public class FilteredUpcomingFootballTeamIdExtractor {
                 e.printStackTrace();
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             }
+
+
+            // 1. First click on the right date navigation element
+            WebElement rightDateNav = driver.findElement(By.cssSelector("span.date-right-coll[onclick='gotoDate(+1);']"));
+            System.out.println("Clicking on right date navigation...");
+            rightDateNav.click();
+
+            // Wait a bit to see the effect
+            Thread.sleep(2000);
+
+            // 2. Then click on the left date navigation element
+            WebElement leftDateNav = driver.findElement(By.cssSelector("span.date-left-coll[onclick='gotoDate(-1);']"));
+            System.out.println("Clicking on left date navigation...");
+            leftDateNav.click();
+
+            Thread.sleep(1000);
 
             // 2. "Futbol" sekmesinin seçili olduğundan emin ol
             try {
