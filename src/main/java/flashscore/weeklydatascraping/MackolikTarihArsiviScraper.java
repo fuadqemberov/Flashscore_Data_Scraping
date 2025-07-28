@@ -37,7 +37,7 @@ public class MackolikTarihArsiviScraper {
             LocalDate startDate = LocalDate.of(2025, 5, 1); // Başlangıç tarihi
             LocalDate endDate = LocalDate.now().minusDays(1);     // Bitiş tarihi: Dün
             String outputFileName = "tum_mac_urlleri.txt";
-            // --- ---
+
 
             // Başlamadan önce dosyayı temizle/oluştur
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFileName, false))) {

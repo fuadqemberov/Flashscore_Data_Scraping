@@ -19,7 +19,7 @@ import java.util.List;
 
 public class MackolikIdToFile {
 
-    private static String LEAGUE_ID = "27";
+    private static String LEAGUE_ID = "91";
 
     public static void main(String[] args) {
         // WebDriver kurulumu

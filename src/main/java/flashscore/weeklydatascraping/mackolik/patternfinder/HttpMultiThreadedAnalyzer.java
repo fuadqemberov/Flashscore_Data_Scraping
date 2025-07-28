@@ -11,7 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 
-public class HttpMultiThreadedAnalyzer {
+public class
+
+HttpMultiThreadedAnalyzer {
 
     private static final Logger log = LoggerFactory.getLogger(HttpMultiThreadedAnalyzer.class);
     private static final int START_YEAR = 2023; // Inclusive

@@ -141,26 +141,26 @@
     <dependency>
         <groupId>org.jsoup</groupId>
         <artifactId>jsoup</artifactId>
-        <version>1.15.4</version> <!-- En güncel sürümü kontrol edin -->
+        <version>1.15.4</version>
     </dependency>
 
     <!-- Apache HttpClient -->
     <dependency>
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpclient</artifactId>
-        <version>4.5.14</version> <!-- En güncel sürümü kontrol edin -->
+        <version>4.5.14</version>
     </dependency>
 
     <!-- Apache POI (Excel işlemleri için) -->
     <dependency>
         <groupId>org.apache.poi</groupId>
         <artifactId>poi</artifactId>
-        <version>5.2.3</version> <!-- En güncel sürümü kontrol edin -->
+        <version>5.2.3</version>
     </dependency>
     <dependency>
         <groupId>org.apache.poi</groupId>
         <artifactId>poi-ooxml</artifactId>
-        <version>5.2.3</version> <!-- En güncel sürümü kontrol edin -->
+        <version>5.2.3</version>
     </dependency>
 
     <dependency>
@@ -170,19 +170,31 @@
     </dependency>
 
 
-    <!-- Logging (isteğe bağlı, ancak önerilir) -->
+
     <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
-        <version>1.7.36</version> <!-- En güncel sürümü kontrol edin -->
+        <version>1.7.36</version>
     </dependency>
+
     <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-simple</artifactId>
-        <version>1.7.36</version> <!-- En güncel sürümü kontrol edin -->
+        <version>1.7.36</version>
         <scope>runtime</scope>
     </dependency>
 
+    <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-simple</artifactId>
+        <version>2.0.13</version>
+    </dependency>
+
+    <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-nop</artifactId>
+        <version>2.0.13</version>
+    </dependency>
 
 </dependencies>
 
