@@ -190,6 +190,13 @@ public class MatchAnalyzer implements Runnable {
             report += String.format("    -> PATTERN 5 - 1.6x / 4.xx / 4.7x ORANI%n");
         }
 
+        // YENİ PATTERN 6 EKLENDİ
+        boolean pattern6_case1 = (p1 >= 2.30 && p1 <= 2.39) && (pX >= 3.20 && pX <= 3.29) && (p2 >= 2.90 && p2 <= 2.99);
+        boolean pattern6_case2_reverse = (p1 >= 2.90 && p1 <= 2.99) && (pX >= 3.20 && pX <= 3.29) && (p2 >= 2.30 && p2 <= 2.39);
+        if (pattern6_case1 || pattern6_case2_reverse) {
+            report += String.format("    -> PATTERN 6 - 2.3x / 3.2x / 2.9x ORANI (ve tersi)%n");
+        }
+
         if (!report.isEmpty()) {
             synchronized (System.out) {
                 System.out.println("\n------------------ [!] PATTERN(LER) BULUNDU: " + matchTitle + " ------------------");
