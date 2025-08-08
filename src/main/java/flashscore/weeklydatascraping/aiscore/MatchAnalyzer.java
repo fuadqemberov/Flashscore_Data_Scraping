@@ -110,16 +110,18 @@ public class MatchAnalyzer implements Runnable {
             driver.get(oddsUrl);
             wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("div.newOdds")));
 
-            List<WebElement> companyRows = driver.findElements(By.cssSelector("div.content[data-v-07c8a370] > div.flex.w100"));
+            List<WebElement> companyRows = driver.findElements(By.cssSelector("div.flex.w100.borderBottom"));
             WebElement bet365Row = null;
             for (WebElement row : companyRows) {
                 try {
                     WebElement logo = row.findElement(By.cssSelector("img.logo"));
                     if (logo.getAttribute("src").contains("fe8aec51afeb2de633c9")) {
                         bet365Row = row;
-                        break;
+                        break; // Satırı bulunca döngüden çık
                     }
-                } catch (Exception e) { /* Logo yoksa devam et */ }
+                } catch (Exception e) {
+                    // Bu satırda logo bulunamadı, sorun değil, döngüye devam et.
+                }
             }
 
             if (bet365Row == null) return;
@@ -179,11 +181,7 @@ public class MatchAnalyzer implements Runnable {
         if (homeWasFavoriteLostIt || awayWasFavoriteLostIt) {
             report += String.format("    -> PATTERN 3 - FAVORİ DEĞİŞİMİ%n");
         }
-        boolean lowHighPattern1 = (p1 >= 1.50 && p1 <= 1.59) && (pX >= 4.00) && (p2 >= 5.00);
-        boolean lowHighPattern2 = (p2 >= 1.50 && p2 <= 1.59) && (pX >= 4.00) && (p1 >= 5.00);
-        if(lowHighPattern1 || lowHighPattern2) {
-            report += String.format("    -> PATTERN 4 - DÜŞÜK FAVORİ / YÜKSEK SÜRPRİZ%n");
-        }
+
         boolean newPatternHomeFav = (p1 >= 1.60 && p1 <= 1.69) && (pX >= 4.00) && (p2 >= 4.70 && p2 <= 4.79);
         boolean newPatternAwayFav = (p2 >= 1.60 && p2 <= 1.69) && (pX >= 4.00) && (p1 >= 4.70 && p1 <= 4.79);
         if(newPatternHomeFav || newPatternAwayFav) {
@@ -208,7 +206,6 @@ public class MatchAnalyzer implements Runnable {
                 System.out.println("----------------------------------------------------------------------------------\n");
             }
 
-            // URL'yi dosyaya thread-safe bir şekilde yaz
             synchronized (fileLock) {
                 try (BufferedWriter writer = new BufferedWriter(new FileWriter(OUTPUT_FILE, true))) {
                     File file = new File(OUTPUT_FILE);

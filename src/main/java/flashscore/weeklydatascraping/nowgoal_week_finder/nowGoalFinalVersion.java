@@ -27,11 +27,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class nowGoalFinalVersion {
     private static final Random RANDOM = new Random();
     private static final int PAGE_LOAD_TIMEOUT = 20;
-    private static final String BASE_URL = "https://football.nowgoal25.com";
+    private static final String BASE_URL = "https://football.nowgoal.com";
     private static final String CURRENT_SEASON = "2025";
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
     private static final List<String> LEAGUE_IDS = Arrays.asList(
-            "10", "26", "22", "122", "15", "212", "127", "60", "1292", "166", "214"
+            "127","7","5","9","3","13","122","121","1","6","124"
     );
 
     private static final ConcurrentHashMap<String, List<List<String>>> results = new ConcurrentHashMap<>();
@@ -239,7 +239,7 @@ public class nowGoalFinalVersion {
                                                        Map<String, String> upcomingMatches, LeagueInfo leagueInfo) {
         List<List<String>> leagueResults = new ArrayList<>();
         try {
-            for (int year = 2023; year > 2019; year--) {
+            for (int year = 2024; year > 2017; year--) {
                 scrapeYearData(driver, leagueId, year, week, teamList, leagueResults, upcomingMatches, leagueInfo);
             }
         } catch (Exception e) {

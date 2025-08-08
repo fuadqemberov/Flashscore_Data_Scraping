@@ -16,7 +16,7 @@ public class
 HttpMultiThreadedAnalyzer {
 
     private static final Logger log = LoggerFactory.getLogger(HttpMultiThreadedAnalyzer.class);
-    private static final int START_YEAR = 2023; // Inclusive
+    private static final int START_YEAR = 2024; // Inclusive
     private static final int END_YEAR = 2017;   // Inclusive
     private static final int NUM_THREADS = 10; // Adjust based on your system and network tolerance
 
