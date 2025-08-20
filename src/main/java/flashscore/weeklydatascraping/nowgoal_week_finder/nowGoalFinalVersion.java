@@ -31,7 +31,7 @@ public class nowGoalFinalVersion {
     private static final String CURRENT_SEASON = "2025";
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
     private static final List<String> LEAGUE_IDS = Arrays.asList(
-            "127","7","5","9","3","13","122","121","1","6","124"
+            "22","5"
     );
 
     private static final ConcurrentHashMap<String, List<List<String>>> results = new ConcurrentHashMap<>();
