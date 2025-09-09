@@ -82,10 +82,30 @@ public class FilteredUpcomingFootballTeamIdExtractor {
             }
 
 
-            // 1. First click on the right date navigation element
-            WebElement rightDateNav = driver.findElement(By.cssSelector("span.date-right-coll[onclick='gotoDate(+1);']"));
-            System.out.println("Clicking on right date navigation...");
-            rightDateNav.click();
+            try {
+                WebDriverWait wait2 = new WebDriverWait(driver, Duration.ofSeconds(10));
+                WebElement rightDateNav = wait2.until(ExpectedConditions.elementToBeClickable(
+                        By.xpath("//span[@class='date-right-coll' and @onclick='gotoDate(+1);']")));
+                System.out.println("Clicking on right date navigation...");
+                rightDateNav.click();
+            } catch (Exception e) {
+                System.out.println("Regular click failed, trying alternative methods...");
+
+                // Solution 2: Use JavaScript click if regular click fails
+                try {
+                    WebElement rightDateNav = driver.findElement(By.xpath("//span[@class='date-right-coll' and @onclick='gotoDate(+1);']"));
+                    JavascriptExecutor js3 = (JavascriptExecutor) driver;
+                    js3.executeScript("arguments[0].click();", rightDateNav);
+                    System.out.println("JavaScript click succeeded");
+                } catch (Exception e2) {
+                    System.out.println("JavaScript click failed, trying direct function call...");
+
+                    // Solution 3: Execute the JavaScript function directly
+                    JavascriptExecutor js2 = (JavascriptExecutor) driver;
+                    js2.executeScript("gotoDate(+1);");
+                    System.out.println("Direct function call executed");
+                }
+            }
 
             // Wait a bit to see the effect
             Thread.sleep(2000);
