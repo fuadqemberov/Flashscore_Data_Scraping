@@ -24,7 +24,7 @@ public class FilteredUpcomingFootballTeamIdExtractor {
     public static Set<String> upcomingFootballTeamIds = new HashSet<>();
     public static String txt = "team_ids.txt";
 
-    public static void main(String[] args) {
+     public static void main(String[] args) {
         WebDriverManager.chromedriver().setup();
 
         // Tarayıcı ayarları

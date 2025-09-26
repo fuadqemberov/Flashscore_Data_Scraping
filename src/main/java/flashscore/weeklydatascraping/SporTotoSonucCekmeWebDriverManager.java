@@ -58,7 +58,7 @@ public class SporTotoSonucCekmeWebDriverManager {
                 select.selectByIndex(i);
 
                 // Verilerin yüklenmesini bekle
-                wait.until(ExpectedConditions.numberOfElementsToBeMoreThan(By.cssSelector("div[data-comp-name='sporToto-result-eventWrapper']"), 0));
+                wait.until(ExpectedConditions.numberOfElementsToBeMoreThan(By.cssSelector("div[data-comp-name='sporToto-result-eventWrapper']"), Integer.valueOf(0)));
 
                 List<WebElement> macSatirlari = driver.findElements(By.cssSelector("div[data-comp-name='sporToto-result-eventWrapper']"));
 
