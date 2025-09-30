@@ -22,8 +22,7 @@ public class SporTotoSonucCekmeWebDriverManager {
 
     public static void main(String[] args) {
 
-        // WebDriverManager, Chrome sürümünüzle uyumlu olan ChromeDriver'ı
-        // otomatik olarak indirir ve kurar.
+
         WebDriverManager.chromedriver().setup();
 
         WebDriver driver = new ChromeDriver();

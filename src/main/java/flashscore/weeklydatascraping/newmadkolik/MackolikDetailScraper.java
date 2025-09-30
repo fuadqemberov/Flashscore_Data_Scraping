@@ -18,7 +18,7 @@ public class MackolikDetailScraper {
     private static final String BASE_URL = "https://www.mackolik.com";
     private static final String URL_FILE = "tum_mac_urlleri.txt";
     private static final String EXCEL_FILE = "mackolik_datas.xlsx";
-    private static final int THREAD_COUNT = 10; // Thread havuzu boyutu
+    private static final int THREAD_COUNT = 10;
 
     public static void main(String[] args) throws InterruptedException {
         List<String> urlsFromFile = readUrlsFromFile(URL_FILE);

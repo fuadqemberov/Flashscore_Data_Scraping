@@ -23,12 +23,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class MackolikIdToFileV2List {
 
-    // Birden fazla sezon/lig ID'si alabilmek için liste yapıyoruz
     private static final List<String> SEASON_IDS = Arrays.asList(
-            "70632",  // Örnek sezon 1
-            "68956",  // Örnek sezon 2
-            "67234"   // Örnek sezon 3
-            // Daha fazla sezon ID'si ekleyebilirsin
+            "70270",  // Örnek sezon 1
+            "69112",  // Örnek sezon 2
+            "67234","70632","70423"
+
     );
 
     private static final int THREAD_COUNT = 4; // Selenium için optimal thread sayısı
