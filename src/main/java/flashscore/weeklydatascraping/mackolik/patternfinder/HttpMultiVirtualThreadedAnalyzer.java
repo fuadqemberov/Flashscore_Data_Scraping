@@ -23,11 +23,9 @@ import java.util.stream.Collectors;
 public class HttpMultiVirtualThreadedAnalyzer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpMultiVirtualThreadedAnalyzer.class);
-
     private static final int START_YEAR = 2024;
     private static final int END_YEAR = 2017;
-    // Aynı anda 500 eş zamanlı ağ bağlantısı yapabilmek için havuz boyutu.
-    private static final int CONNECTION_POOL_SIZE = 500;
+    private static final int CONNECTION_POOL_SIZE = 1000;
 
     private static class TeamProcessorTask implements Callable<String> {
         private final int teamId;
