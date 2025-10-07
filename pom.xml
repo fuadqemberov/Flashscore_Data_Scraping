@@ -86,6 +86,12 @@
         <scope>test</scope>
     </dependency>
 
+    <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpclient</artifactId>
+        <version>4.5.14</version> <!-- v4'ün stabil bir sürümü -->
+    </dependency>
+
 
     <dependency>
         <groupId>com.google.code.gson</groupId>
@@ -204,8 +210,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>16</source>
-                    <target>16</target>
+                    <source>21</source>
+                    <target>21</target>
+                    <compilerArgs>--enable-preview</compilerArgs>
                 </configuration>
             </plugin>
         </plugins>
