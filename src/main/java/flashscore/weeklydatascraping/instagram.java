@@ -16,7 +16,8 @@ public class instagram {
     static String link = "https://www.instagram.com/p/";
     static List<String> links = new ArrayList<>();
     static String text = "";
-    static{
+
+    static {
         links.addAll(Arrays.asList(
                 ""));
     }
@@ -29,9 +30,9 @@ public class instagram {
         driver.findElement(By.xpath("//input[@name='password']")).sendKeys(password);
         driver.findElement(By.xpath("//button[@type='submit']//div[text()='Log in']")).click();
         Thread.sleep(3000);
-        for(String link1 : links) {
+        for (String link1 : links) {
             driver.switchTo().newWindow(WindowType.TAB);
-            driver.get(link+link1+"/");
+            driver.get(link + link1 + "/");
             Thread.sleep(200);
             driver.findElement(By.xpath("//textarea[@aria-label='Add a comment…']")).click();
             Thread.sleep(100);
@@ -40,13 +41,11 @@ public class instagram {
     }
 
 
-
     public static WebDriver getChromeDriver() {
         System.setProperty("webdriver.chrome.driver", "src\\chrome\\chromedriver.exe");
         if (driverr == null) {
             driverr = new ChromeDriver();
         }
-
         return driverr;
     }
 }

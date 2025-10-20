@@ -14,9 +14,9 @@ import java.util.TreeMap;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
-public class AdvancedVirtualThreadedAnalyzer2 {
+public class AdvancedVirtualThreadedAnalyzer {
 
-    private static final Logger log = LoggerFactory.getLogger(AdvancedVirtualThreadedAnalyzer2.class);
+    private static final Logger log = LoggerFactory.getLogger(AdvancedVirtualThreadedAnalyzer.class);
     private static final int START_YEAR = 2024;
     private static final int END_YEAR = 2017;
 
