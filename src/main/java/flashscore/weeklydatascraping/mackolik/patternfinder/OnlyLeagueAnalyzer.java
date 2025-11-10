@@ -11,9 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 
-public class HttpMultiThreadedAnalyzer {
+public class OnlyLeagueAnalyzer {
 
-    private static final Logger log = LoggerFactory.getLogger(HttpMultiThreadedAnalyzer.class);
+    private static final Logger log = LoggerFactory.getLogger(OnlyLeagueAnalyzer.class);
     private static final int START_YEAR = 2024; // Inclusive
     private static final int END_YEAR = 2017;   // Inclusive
     private static final int NUM_THREADS = 10; // Adjust based on your system and network tolerance
@@ -33,7 +33,7 @@ public class HttpMultiThreadedAnalyzer {
             log.info("Processing Team ID: {}", teamId);
             try {
                 // 1. Find the current season's pattern
-                MatchPattern currentPattern = HttpScoreScraper.findCurrentSeasonLastTwoMatches(httpClient, teamId);
+                MatchPattern currentPattern = OnlyLeagueScraper.findCurrentSeasonLastTwoMatches(httpClient, teamId);
                 if (currentPattern == null) {
                     log.warn("Could not find  current pattern for team ID: {}", teamId);
                     return null; // Skip if no current pattern
@@ -50,7 +50,7 @@ public class HttpMultiThreadedAnalyzer {
                         // Optional small delay between requests for the same team
                         // Thread.sleep(100); // 100ms delay
 
-                        List<MatchResult> seasonMatches = HttpScoreScraper.findScorePattern(httpClient, currentPattern, season, teamId);
+                        List<MatchResult> seasonMatches = OnlyLeagueScraper.findScorePattern(httpClient, currentPattern, season, teamId);
 
                         if (!seasonMatches.isEmpty()) {
                             foundMatchesForTeam = true;

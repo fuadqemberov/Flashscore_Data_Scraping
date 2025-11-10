@@ -20,9 +20,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class HttpMultiVirtualThreadedAnalyzer {
+public class OnlyLeagueVirtualThreadedAnalyzer {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(HttpMultiVirtualThreadedAnalyzer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(OnlyLeagueVirtualThreadedAnalyzer.class);
     private static final int START_YEAR = 2024;
     private static final int END_YEAR = 2017;
     private static final int CONNECTION_POOL_SIZE = 1000;
@@ -45,7 +45,7 @@ public class HttpMultiVirtualThreadedAnalyzer {
             long taskStartTime = System.currentTimeMillis(); // Görev başlangıç zamanı
             LOGGER.info("[START] Processing Team ID: {}", teamId);
             try {
-                MatchPattern currentPattern = HttpScoreScraper.findCurrentSeasonLastTwoMatches(httpClient, teamId);
+                MatchPattern currentPattern = OnlyLeagueScraper.findCurrentSeasonLastTwoMatches(httpClient, teamId);
                 if (currentPattern == null) {
                     LOGGER.warn("[SKIP] Could not find a current pattern for team ID: {}", teamId);
                     return null;
@@ -78,7 +78,7 @@ public class HttpMultiVirtualThreadedAnalyzer {
                 String season = year + "/" + (year + 1);
                 LOGGER.debug("Searching team ID {} in season {}", teamId, season);
                 try {
-                    List<MatchResult> seasonMatches = HttpScoreScraper.findScorePattern(httpClient, pattern, season, teamId);
+                    List<MatchResult> seasonMatches = OnlyLeagueScraper.findScorePattern(httpClient, pattern, season, teamId);
                     if (seasonMatches != null && !seasonMatches.isEmpty()) {
                         LOGGER.info("Found {} matches for team ID {} in season {}", seasonMatches.size(), teamId, season);
                         foundMatchesBySeason.put(year, seasonMatches);

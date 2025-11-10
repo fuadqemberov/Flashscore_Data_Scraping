@@ -15,9 +15,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class HttpScoreScraper {
+public class OnlyLeagueScraper {
 
-    private static final Logger log = LoggerFactory.getLogger(HttpScoreScraper.class);
+    private static final Logger log = LoggerFactory.getLogger(OnlyLeagueScraper.class);
     private static final String BASE_URL = "https://arsiv.mackolik.com/Team/Default.aspx?id=%d&season=%s";
     private static final String CURRENT_SEASON = "2025/2026"; // Assuming this is the current season year format
 

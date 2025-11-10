@@ -43,7 +43,7 @@ public class HttpVirtualThreadedPatternAnalyzer {
                     .setDefaultRequestConfig(requestConfig)
                     .build()) {
 
-                MatchPattern currentPattern = HttpScoreScraper.findCurrentSeasonLastTwoMatches(httpClient, teamId);
+                MatchPattern currentPattern = OnlyLeagueScraper.findCurrentSeasonLastTwoMatches(httpClient, teamId);
                 if (currentPattern == null) {
                     LOGGER.warn("[SKIP] No current pattern for team ID: {}", teamId);
                     return null;
@@ -75,7 +75,7 @@ public class HttpVirtualThreadedPatternAnalyzer {
                 String season = year + "/" + (year + 1);
                 LOGGER.debug("Searching team ID {} in season {}", teamId, season);
                 try {
-                    List<MatchResult> matches = HttpScoreScraper.findScorePattern(httpClient, pattern, season, teamId);
+                    List<MatchResult> matches = OnlyLeagueScraper.findScorePattern(httpClient, pattern, season, teamId);
                     if (matches != null && !matches.isEmpty()) {
                         LOGGER.info("Found {} matches for team ID {} in season {}", matches.size(), teamId, season);
                         foundMatches.put(year, matches);
