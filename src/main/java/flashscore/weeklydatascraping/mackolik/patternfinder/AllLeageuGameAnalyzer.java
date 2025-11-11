@@ -3,8 +3,6 @@ package flashscore.weeklydatascraping.mackolik.patternfinder;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.logging.LogType;
-import org.openqa.selenium.logging.LoggingPreferences;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,7 +10,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
-import java.util.logging.Level;
 
 public class AllLeageuGameAnalyzer {
     private static final Logger log = LoggerFactory.getLogger(AllLeageuGameAnalyzer.class);
@@ -21,16 +18,8 @@ public class AllLeageuGameAnalyzer {
     private static final int NUM_THREADS = 10;
 
     static {
-        // TÜM Selenium loglarını COMPLETELY KAPAT
-        System.setProperty("webdriver.chrome.silentOutput", "true");
-        System.setProperty("webdriver.http.factory", "jdk-http-client");
-        System.setProperty("webdriver.chrome.verboseLogging", "false");
-
-        // Java util logging'i komple kapat
-        java.util.logging.Logger.getLogger("").setLevel(Level.OFF);
-        java.util.logging.Logger.getLogger("org.openqa.selenium").setLevel(Level.OFF);
-        java.util.logging.Logger.getLogger("com.gargoylesoftware").setLevel(Level.OFF);
-        java.util.logging.Logger.getLogger("org.apache").setLevel(Level.OFF);
+        System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "DEBUG");
+        System.setProperty("org.slf4j.simpleLogger.log.flashscore.weeklydatascraping.mackolik.patternfinder", "DEBUG");
     }
 
     private static class TeamProcessorTask implements Callable<String> {
@@ -45,39 +34,32 @@ public class AllLeageuGameAnalyzer {
             log.info("🔍 Takım ID işleniyor: {}", teamId);
 
             ChromeOptions options = new ChromeOptions();
-            options.addArguments("--headless");
+            options.addArguments("--headless=new");
             options.addArguments("--disable-gpu");
             options.addArguments("--no-sandbox");
             options.addArguments("--disable-dev-shm-usage");
+            options.addArguments("--window-size=1920,1080");
             options.addArguments("--log-level=3");
             options.addArguments("--silent");
             options.addArguments("--disable-logging");
             options.addArguments("--disable-dev-tools");
+            options.addArguments("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-            // TÜM logging'i devre dışı bırak
-            LoggingPreferences logs = new LoggingPreferences();
-            logs.enable(LogType.BROWSER, Level.OFF);
-            logs.enable(LogType.DRIVER, Level.OFF);
-            logs.enable(LogType.PERFORMANCE, Level.OFF);
-            logs.enable(LogType.CLIENT, Level.OFF);
-            logs.enable(LogType.SERVER, Level.OFF);
-            options.setCapability("goog:loggingPrefs", logs);
-
-            // Ek capability'ler
-            options.setCapability("goog:chromeOptions", new java.util.HashMap<String, Object>() {{
-                put("excludeSwitches", new String[]{"enable-logging"});
-            }});
+            // Headless mod için özel ayarlar
+            options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation"});
+            options.setExperimentalOption("useAutomationExtension", false);
 
             WebDriver driver = null;
             try {
                 driver = new ChromeDriver(options);
 
                 // 1. Find the current season's pattern
-                MatchPattern currentPattern = flashscore.weeklydatascraping.mackolik.patternfinder.SeleniumScoreScraperWithDateSort.findCurrentSeasonLastTwoMatches(driver, teamId);
+                MatchPattern currentPattern = SeleniumScoreScraperWithDateSort.findCurrentSeasonLastTwoMatches(driver, teamId);
                 if (currentPattern == null) {
                     log.info("❌ Takım ID {} için mevcut pattern bulunamadı", teamId);
                     return null;
                 }
+                System.out.println(currentPattern.toString());
 
                 StringBuilder teamResults = new StringBuilder();
                 boolean foundMatchesForTeam = false;
@@ -135,21 +117,6 @@ public class AllLeageuGameAnalyzer {
     }
 
     public static void main(String[] args) {
-        // TÜM system property'leri log kapatmak için
-        System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "INFO");
-        System.setProperty("org.slf4j.simpleLogger.logFile", "System.out");
-        System.setProperty("org.slf4j.simpleLogger.showDateTime", "false");
-        System.setProperty("org.slf4j.simpleLogger.showThreadName", "false");
-        System.setProperty("org.slf4j.simpleLogger.levelInBrackets", "false");
-
-        // TÜM diğer logları kapat
-        System.setProperty("org.slf4j.simpleLogger.log.org.apache", "OFF");
-        System.setProperty("org.slf4j.simpleLogger.log.org.openqa", "OFF");
-        System.setProperty("org.slf4j.simpleLogger.log.com.gargoylesoftware", "OFF");
-        System.setProperty("org.slf4j.simpleLogger.log.io.github.bonigarcia", "OFF");
-        System.setProperty("org.slf4j.simpleLogger.log.io.netty", "OFF");
-        System.setProperty("org.slf4j.simpleLogger.log.org.eclipse.jetty", "OFF");
-
         log.info("🚀 Çoklu thread analiz başlatılıyor...");
 
         List<String> teamIds;
@@ -164,57 +131,81 @@ public class AllLeageuGameAnalyzer {
         ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
         List<Future<String>> futures = new ArrayList<>();
 
-        for (String idStr : teamIds) {
-            try {
-                int teamId = Integer.parseInt(idStr.trim());
-                Callable<String> task = new TeamProcessorTask(teamId);
-                futures.add(executor.submit(task));
-            } catch (NumberFormatException e) {
-                // Görmezden gel
-            }
-        }
-
-        log.info("📤 {} task thread pool'a gönderildi", futures.size());
-
-        int successCount = 0;
-        int foundCount = 0;
-
-        for (Future<String> future : futures) {
-            try {
-                String result = future.get();
-                if (result != null && !result.isEmpty()) {
-                    System.out.println(result);
-                    System.out.println("====================================\n");
-                    foundCount++;
-                }
-                successCount++;
-
-                if (successCount % 10 == 0) {
-                    log.info("📊 İlerleme: {}/{} tamamlandı, {} eşleşme bulundu",
-                            successCount, futures.size(), foundCount);
-                }
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (ExecutionException e) {
-                // Görmezden gel
-            }
-        }
-
-        log.info("🎉 İşlem tamamlandı! {} task başarılı, {} takımda eşleşme bulundu",
-                successCount, foundCount);
-
-        executor.shutdown();
         try {
-            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
+            for (String idStr : teamIds) {
+                try {
+                    int teamId = Integer.parseInt(idStr.trim());
+                    Callable<String> task = new TeamProcessorTask(teamId);
+                    futures.add(executor.submit(task));
+                } catch (NumberFormatException e) {
+                    // Görmezden gel
+                }
             }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-            Thread.currentThread().interrupt();
+
+            log.info("📤 {} task thread pool'a gönderildi", futures.size());
+
+            int successCount = 0;
+            int foundCount = 0;
+
+            // Tüm task'ların tamamlanmasını bekle
+            for (Future<String> future : futures) {
+                try {
+                    String result = future.get(5, TimeUnit.MINUTES); // Timeout ekle
+                    if (result != null && !result.isEmpty()) {
+                        System.out.println(result);
+                        System.out.println("====================================\n");
+                        foundCount++;
+                    }
+                    successCount++;
+
+                    if (successCount % 10 == 0) {
+                        log.info("📊 İlerleme: {}/{} tamamlandı, {} eşleşme bulundu",
+                                successCount, futures.size(), foundCount);
+                    }
+
+                } catch (TimeoutException e) {
+                    log.warn("⏰ Task timeout, atlanıyor...");
+                    successCount++;
+                } catch (InterruptedException e) {
+                    log.warn("⏹️ İşlem kesildi");
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (ExecutionException e) {
+                    log.debug("❌ Task hatası: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+                    successCount++;
+                }
+            }
+
+            log.info("🎉 İşlem tamamlandı! {} task başarılı, {} takımda eşleşme bulundu",
+                    successCount, foundCount);
+
+        } catch (Exception e) {
+            log.error("💥 Beklenmeyen hata: {}", e.getMessage(), e);
+        } finally {
+            // Executor'ı kesinlikle kapat
+            log.info("🔴 Executor kapatılıyor...");
+            executor.shutdown();
+
+            try {
+                // Mevcut task'ların bitmesini bekle
+                if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+                    log.warn("⏳ Zaman aşımı, executor zorla kapatılıyor...");
+                    executor.shutdownNow();
+
+                    // Zorla kapatma için de bekle
+                    if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                        log.error("💥 Executor kapatılamadı!");
+                    }
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+
+            log.info("✅ Executor başarıyla kapatıldı");
         }
 
         log.info("👋 Program sonlandırılıyor...");
+        System.exit(0); // Tüm thread'leri sonlandır
     }
 }

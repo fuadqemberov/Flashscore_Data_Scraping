@@ -4,3 +4,11 @@ burada hangi takimla oynadikdan (1,2,3,4,5 mac once ve ya sonra)
 sonra ve ya evvel bu 2/1 1/2 bash vermish ve hangi takim bunu cok yapmish hepsini detayli yaz :
 10 tane farkli secenek ver 1 , 2, 3,4,5 mac once ve 1 , 2, 3,4,5 sonrasi  gibi ayir
 count olarak yaz ki hangi takim hangi kateqoride kac defa yapmish
+
+
+sana excel datasi atiyorum burada bir takimin 2015-2015 arasi 2/1 1/2 HTFT istatistigi
+var ve bu maclardan 5 mac onceki maclari ve 5 mac sonraki maclari yer aliyor senden yapman gereken
+burada hangi takimla oynadikdan (1,2,3,4,5 mac once ve ya sonra) ve ayni shekildede hangi skorlardan sonra ve once oldugunu cikarman (1,2,3,4,5 mac once ve ya sonra
+sonra ve ya evvel bu 2/1 1/2 bash vermish ve hangi takim bunu cok yapmish hepsini detayli yaz :
+10  tane farkli secenek  1 , 2, 3,4,5 mac once ve 1 , 2, 3,4,5 sonrasi , 10 tane de  hangi skorlardan sonra ve once oldugunu 1 , 2, 3,4,5 mac once ve 1 , 2, 3,4,5 sonrasi    gibi ayir
+count olarak yaz ki bu skorladan ve ya bu takimlardan sonra evvel ne kadar yapilmish

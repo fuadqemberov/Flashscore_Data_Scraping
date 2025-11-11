@@ -1,8 +1,6 @@
 package flashscore.weeklydatascraping.mackolik.patternfinder;
 
-import org.openqa.selenium.By;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
+import org.openqa.selenium.*;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
@@ -19,27 +17,38 @@ public class SeleniumScoreScraperWithDateSort {
     private static final String CURRENT_SEASON = "2025/2026";
 
     /**
-     * Navigates to URL and clicks "Tarihe göre sıralı" button
+     * Geliştirilmiş navigate ve sort metodu - headless mod için optimize
      */
     private static void navigateAndSortByDate(WebDriver driver, String url) {
         try {
             log.debug("Navigating to URL: {}", url);
             driver.get(url);
 
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
 
-            try {
-                WebElement dateSortButton = wait.until(
-                        ExpectedConditions.elementToBeClickable(By.id("tabDate"))
-                );
+            // Sayfanın tamamen yüklenmesini bekle
+            wait.until(webDriver ->
+                    ((JavascriptExecutor) webDriver).executeScript("return document.readyState").equals("complete"));
 
-                log.debug("Clicking 'Tarihe göre sıralı' button");
-                dateSortButton.click();
+            // Daha güvenli buton bulma
+            WebElement dateSortButton = findDateSortButton(driver);
 
-                Thread.sleep(1500);
+            if (dateSortButton != null) {
+                log.debug("Clicking 'Tarihe göre sıralı' button with JavaScript");
 
-            } catch (Exception e) {
-                log.warn("Could not click date sort button: {}", e.getMessage());
+                // JavaScript ile tıkla - daha güvenli
+                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", dateSortButton);
+
+                // Headless mod için daha uzun bekleme
+                Thread.sleep(3000);
+
+                // Sayfanın yeniden yüklenmesini bekle
+                wait.until(webDriver ->
+                        ((JavascriptExecutor) webDriver).executeScript("return document.readyState").equals("complete"));
+
+                log.debug("Date sort completed successfully");
+            } else {
+                log.warn("Date sort button not found, continuing without sorting");
             }
 
         } catch (Exception e) {
@@ -48,21 +57,54 @@ public class SeleniumScoreScraperWithDateSort {
     }
 
     /**
-     * Finds the last two completed matches from current season (sorted by date)
+     * Birden fazla selector ile buton bulma - headless mod için
+     */
+    private static WebElement findDateSortButton(WebDriver driver) {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+
+        // Farklı selector stratejileri
+        By[] selectors = {
+                By.id("tabDate"),
+                By.cssSelector("#tabDate"),
+                By.xpath("//a[contains(text(), 'Tarihe')]"),
+                By.xpath("//*[contains(@id, 'tabDate')]"),
+                By.xpath("//a[contains(@onclick, 'Date')]")
+        };
+
+        for (By selector : selectors) {
+            try {
+                WebElement element = wait.until(ExpectedConditions.elementToBeClickable(selector));
+                log.info("Found date sort button with selector: {}", selector);
+                return element;
+            } catch (Exception e) {
+                log.debug("Date sort button not found with selector: {}", selector);
+            }
+        }
+
+        log.warn("Could not find date sort button with any selector");
+        return null;
+    }
+
+    /**
+     * Headless mod için optimize edilmiş metot
      */
     public static MatchPattern findCurrentSeasonLastTwoMatches(WebDriver driver, int teamId) throws RuntimeException {
+        System.err.println("=== findCurrentSeasonLastTwoMatches STARTED: Team ID = " + teamId + " ===");
+
         String currentSeasonUrl = String.format(BASE_URL, teamId, CURRENT_SEASON);
-        navigateAndSortByDate(driver, currentSeasonUrl);
+
+        // Navigate with retry mechanism
+        navigateAndSortByDateWithRetry(driver, currentSeasonUrl, 2);
 
         try {
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
 
+            // Tablonun yüklenmesini bekle - daha spesifik bekleyelim
             wait.until(ExpectedConditions.presenceOfElementLocated(
-                    By.cssSelector("#tblFixture tbody")
+                    By.cssSelector("#tblFixture tbody tr")
             ));
 
             String teamName = "Unknown";
-
             try {
                 String title = driver.getTitle();
                 if (title != null && !title.isEmpty()) {
@@ -77,12 +119,13 @@ public class SeleniumScoreScraperWithDateSort {
             );
 
             log.debug("Total rows found: {} for team {}", allRows.size(), teamId);
+            System.err.println("Total rows found: " + allRows.size() + " for team " + teamId);
 
             List<WebElement> completedMatchRows = new ArrayList<>();
 
             for (WebElement row : allRows) {
                 try {
-                    // DÜZELTME: Doğru skor elementi - HTML'de 10. sütunda
+                    // Tarihe göre sıralı görünümde skor 10. sütunda
                     List<WebElement> scoreElements = row.findElements(
                             By.cssSelector("td:nth-child(10) b a")
                     );
@@ -106,6 +149,7 @@ public class SeleniumScoreScraperWithDateSort {
             }
 
             log.debug("Found {} completed matches for team {}", completedMatchRows.size(), teamId);
+            System.err.println("Found " + completedMatchRows.size() + " completed matches for team " + teamId);
 
             if (completedMatchRows.size() >= 2) {
                 int size = completedMatchRows.size();
@@ -113,7 +157,10 @@ public class SeleniumScoreScraperWithDateSort {
                 WebElement lastMatch = completedMatchRows.get(size - 1);
 
                 try {
-                    // DÜZELTME: Doğru sütun index'leri
+                    // Tarihe göre sıralı görünümde sütun indexleri:
+                    // 6. sütun: Ev sahibi
+                    // 9. sütun: Deplasman
+                    // 10. sütun: Skor
                     String score1 = secondLastMatch.findElement(By.cssSelector("td:nth-child(10) b a")).getText().trim();
                     String home1 = secondLastMatch.findElement(By.cssSelector("td:nth-child(6)")).getText().trim();
                     String away1 = secondLastMatch.findElement(By.cssSelector("td:nth-child(9)")).getText().trim();
@@ -122,7 +169,7 @@ public class SeleniumScoreScraperWithDateSort {
                     String home2 = lastMatch.findElement(By.cssSelector("td:nth-child(6)")).getText().trim();
                     String away2 = lastMatch.findElement(By.cssSelector("td:nth-child(9)")).getText().trim();
 
-                    log.info("Last two matches for team ID {}: {} vs {} ({}), {} vs {} ({})",
+                    String logMessage = String.format("Last two matches for team ID %d: %s vs %s (%s), %s vs %s (%s)",
                             teamId, home1, away1, score1, home2, away2, score2);
 
                     String nextHomeTeam = null;
@@ -155,40 +202,68 @@ public class SeleniumScoreScraperWithDateSort {
                             log.trace("Error checking for next match: {}", e.getMessage());
                         }
                     }
-
                     return new MatchPattern(score1, score2, home1, away1, home2, away2, teamName, nextHomeTeam, nextAwayTeam);
 
                 } catch (Exception e) {
-                    log.error("Error extracting last two matches: {}", e.getMessage());
+                    log.error("Error extracting last two matches: {}", e.getMessage(), e);
+                    System.err.println("❌ Error extracting matches for team " + teamId + ": " + e.getMessage());
+                    e.printStackTrace();
                     throw new RuntimeException("Could not extract last two match details for team: " + teamId, e);
                 }
             } else {
-                log.warn("Could not find at least two completed match scores for team ID {} in season {}", teamId, CURRENT_SEASON);
+                String errorMsg = "Could not find at least two completed match scores for team ID " + teamId +
+                        " in season " + CURRENT_SEASON + ". Found: " + completedMatchRows.size();
+                log.warn(errorMsg);
+                System.err.println("⚠️ " + errorMsg);
                 throw new RuntimeException("Son iki maç skoru bulunamadı for team ID: " + teamId + "! Found: " + completedMatchRows.size());
             }
 
         } catch (RuntimeException e) {
+            System.err.println("❌ RuntimeException for team " + teamId + ": " + e.getMessage());
             throw e;
         } catch (Exception e) {
             log.error("Error finding current season matches for team {}: {}", teamId, e.getMessage(), e);
+            System.err.println("❌ General Exception for team " + teamId + ": " + e.getMessage());
+            e.printStackTrace();
             throw new RuntimeException("Could not find current season matches for team ID: " + teamId, e);
         }
     }
 
     /**
-     * Searches for the score pattern in a specific season (sorted by date)
+     * Retry mekanizmalı navigate metodu
+     */
+    private static void navigateAndSortByDateWithRetry(WebDriver driver, String url, int maxRetries) {
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                navigateAndSortByDate(driver, url);
+                return;
+            } catch (Exception e) {
+                log.warn("Navigate attempt {} failed: {}", i + 1, e.getMessage());
+                if (i == maxRetries - 1) throw new RuntimeException("Navigation failed after " + maxRetries + " attempts");
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+    }
+
+    /**
+     * Headless mod için optimize edilmiş pattern arama
      */
     public static List<MatchResult> findScorePattern(WebDriver driver, MatchPattern pattern, String seasonYear, int teamId) {
         List<MatchResult> foundResults = new ArrayList<>();
         String seasonUrl = String.format(BASE_URL, teamId, seasonYear);
-        navigateAndSortByDate(driver, seasonUrl);
+
+        navigateAndSortByDateWithRetry(driver, seasonUrl, 2);
 
         try {
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
             wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("#tblFixture tbody")));
 
             List<WebElement> allRows = driver.findElements(By.cssSelector("#tblFixture tbody tr"));
-            List<WebElement> completedMatchRows = new ArrayList<>(); // Sadece oynanmış maçlar
+            List<WebElement> completedMatchRows = new ArrayList<>();
 
             // SADECE OYNANMIŞ MAÇLARI AL
             for (WebElement row : allRows) {
@@ -198,7 +273,6 @@ public class SeleniumScoreScraperWithDateSort {
                     if (!scoreElements.isEmpty()) {
                         String score = scoreElements.get(0).getText().trim();
 
-                        // SADECE gerçek skorları al ("v" değil)
                         if (!score.equalsIgnoreCase("v") && score.contains("-") && score.matches(".*\\d+.*-.*\\d+.*")) {
                             completedMatchRows.add(row);
                         }
@@ -219,7 +293,6 @@ public class SeleniumScoreScraperWithDateSort {
                     String currentScore = currentRow.findElement(By.cssSelector("td:nth-child(10) b a")).getText().trim();
                     String nextScore = nextRow.findElement(By.cssSelector("td:nth-child(10) b a")).getText().trim();
 
-                    // Pattern kontrolü
                     boolean matchOrder1 = currentScore.equals(pattern.score1) && nextScore.equals(pattern.score2);
                     boolean matchOrder2 = currentScore.equals(pattern.score2) && nextScore.equals(pattern.score1);
 
@@ -227,14 +300,12 @@ public class SeleniumScoreScraperWithDateSort {
                         log.debug("🎯 Pattern match found for season {} at index {}: {} -> {}",
                                 seasonYear, i, currentScore, nextScore);
 
-                        // Takım isimlerini al
                         String homeTeam = currentRow.findElement(By.cssSelector("td:nth-child(6)")).getText().trim();
                         String awayTeam = currentRow.findElement(By.cssSelector("td:nth-child(9)")).getText().trim();
 
                         String secondMatchHomeTeam = nextRow.findElement(By.cssSelector("td:nth-child(6)")).getText().trim();
                         String secondMatchAwayTeam = nextRow.findElement(By.cssSelector("td:nth-child(9)")).getText().trim();
 
-                        // İlk yarı skorları
                         String currentHTScore = getHTScore(currentRow);
                         String secondMatchHTScore = getHTScore(nextRow);
 
@@ -245,10 +316,8 @@ public class SeleniumScoreScraperWithDateSort {
                         result.secondMatchAwayTeam = secondMatchAwayTeam;
                         result.secondMatchHTScore = secondMatchHTScore;
 
-                        // Önceki ve sonraki maç bilgileri
                         addPreviousAndNextMatches(result, completedMatchRows, i);
 
-                        // Filtreleme
                         if (result.containsOriginalTeamVsOpponent()) {
                             foundResults.add(result);
                             log.info("✅ Filtered pattern match added for team {}, season {}", teamId, seasonYear);
@@ -315,4 +384,5 @@ public class SeleniumScoreScraperWithDateSort {
         } else {
             result.nextMatchScore = "Bilgi Yok (Son Maç)";
         }
-    }}
+    }
+}
