@@ -24,7 +24,7 @@ public class NewLeagueHtFtScraper {
 
     private static final String INPUT_FILE_NAME = "takim_idleri.txt";
     private static final String OUTPUT_DIRECTORY_NAME = "excel";
-    private static final String OUTPUT_FILE_NAME = "Tum_Takimlar_Geri_Donus_Analizi.xlsx";
+    private static final String OUTPUT_FILE_NAME = "allGamesHTFT.xlsx";
     private static final int START_YEAR = 2024;
     private static final int END_YEAR = 2025;
     private static final int THREAD_COUNT = 16;
