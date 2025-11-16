@@ -1610,12 +1610,9 @@ public class MackolikPatternDiscoveryV5 {
             }
 
             System.out.println("\n" + "🎯".repeat(30));
-            System.out.print("\n💡 Gelecek hafta için tahmin yapmak ister misiniz? (E/H): ");
-            String predictChoice = scanner.nextLine().trim().toUpperCase();
 
-            if (predictChoice.equals("E") || predictChoice.equals("EVET")) {
-                analyzer.predictUpcomingWeek(matches, allPatterns, leagueUrl);
-            }
+            analyzer.predictUpcomingWeek(matches, allPatterns, leagueUrl);
+
 
         } catch (Exception e) {
             e.printStackTrace();
