@@ -358,7 +358,17 @@ public class MackolikPatternDiscoveryV5 {
         options.addArguments("--disable-blink-features=AutomationControlled");
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--disable-extensions");
+        options.addArguments("--disable-popup-blocking");
+        options.addArguments("--disable-notifications");
+        options.addArguments("--disable-browser-side-navigation");
+        options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation"});
+        options.setExperimentalOption("useAutomationExtension", false);
+
         driver = new ChromeDriver(options);
+
+        // User-Agent'ı normal bir browser gibi ayarla
+        ((JavascriptExecutor) driver).executeScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})");
         wait = new WebDriverWait(driver, Duration.ofSeconds(20));
     }
 
@@ -426,14 +436,40 @@ public class MackolikPatternDiscoveryV5 {
                 String currentSeason = seasonSelect.getFirstSelectedOption().getText().trim();
                 System.out.println("✅ Sezon yüklendi: " + currentSeason);
 
-                WebElement fiksturLink = wait.until(ExpectedConditions.elementToBeClickable(By.linkText("Fikstür")));
-                fiksturLink.click();
-                Thread.sleep(5000);
+                // Fikstür linkini JavaScript ile tıkla - DÜZELTİLDİ
+                try {
+                    WebElement fiksturLink = wait.until(ExpectedConditions.presenceOfElementLocated(By.linkText("Fikstür")));
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", fiksturLink);
+                    Thread.sleep(5000);
+                    System.out.println("✅ Fikstür sayfasına JavaScript ile gidildi");
+                } catch (Exception e) {
+                    System.out.println("⚠️ JavaScript tıklama hatası, alternatif deniyor: " + e.getMessage());
+                    // Alternatif: Doğrudan fikstür URL'sine git
+                    String fiksturUrl = seasonUrl.replace("Standings", "Fixture");
+                    driver.get(fiksturUrl);
+                    Thread.sleep(5000);
+                    System.out.println("✅ Alternatif URL ile fikstür sayfasına gidildi");
+                }
 
-                WebElement firstButton = wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector("span.first")));
-                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", firstButton);
-                Thread.sleep(4000);
-                System.out.println("✅ İlk haftaya gidildi!\n");
+                // İlk haftaya git - JavaScript ile
+                try {
+                    WebElement firstButton = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("span.first")));
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", firstButton);
+                    Thread.sleep(4000);
+                    System.out.println("✅ İlk haftaya JavaScript ile gidildi!\n");
+                } catch (Exception e) {
+                    System.out.println("⚠️ İlk haftaya gitme hatası: " + e.getMessage());
+                    // Hafta seçici ile ilk haftayı seç
+                    try {
+                        WebElement weekSelectElement = wait.until(ExpectedConditions.presenceOfElementLocated(By.id("cboWeek")));
+                        Select weekSelect = new Select(weekSelectElement);
+                        weekSelect.selectByIndex(0);
+                        Thread.sleep(4000);
+                        System.out.println("✅ İlk hafta seçici ile seçildi!\n");
+                    } catch (Exception e2) {
+                        System.out.println("❌ Hafta seçilemedi, devam ediliyor...");
+                    }
+                }
 
                 int weekCounter = 0;
                 int seasonMatchCount = 0;
@@ -500,6 +536,7 @@ public class MackolikPatternDiscoveryV5 {
                             emptyWeekCount = 0;
                         }
 
+                        // Sonraki haftaya JavaScript ile git
                         try {
                             WebElement nextButton = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("span.next")));
                             ((JavascriptExecutor) driver).executeScript("arguments[0].click();", nextButton);
@@ -1458,7 +1495,11 @@ public class MackolikPatternDiscoveryV5 {
                             for (String s : last4Norm) last4Counts.put(s, last4Counts.getOrDefault(s, 0) + 1);
 
                             boolean exactMatch = bagCounts.equals(last4Counts);
-                            if (exactMatch) continue;
+
+                            if (exactMatch) {
+                                System.out.println("[DEBUG] " + team + " - Pattern zaten tamamlanmış (son 4 maç): " + String.join(", ", last4Norm));
+                                continue;
+                            }
                         }
 
                         if (last5Norm != null && last5Norm.size() == 5) {
@@ -1466,7 +1507,10 @@ public class MackolikPatternDiscoveryV5 {
                             Map<String, Integer> first4Counts = new HashMap<>();
                             for (String s : first4of5) first4Counts.put(s, first4Counts.getOrDefault(s, 0) + 1);
 
-                            if (bagCounts.equals(first4Counts)) continue;
+                            if (bagCounts.equals(first4Counts)) {
+                                System.out.println("[DEBUG] " + team + " - Pattern 1 maç önce tamamlanmış, yeni cycle başlamış olabilir");
+                                continue;
+                            }
                         }
 
                         Map<String, Integer> last3Counts = new HashMap<>();
@@ -1508,14 +1552,11 @@ public class MackolikPatternDiscoveryV5 {
                                 }
                             }
 
-                            // SADECE 1 VE YA 1'DEN ÇOK KEZ YAŞAYANLARI GÖSTER - YENİ KOŞUL
-                            if (teamOccurrenceCount >= 1) {
-                                String prediction = String.format("   🎯 %s - DÖRTLÜ_CYCLE TAHMİN: Son 3 maç [%s] → 4. maç olası skor: %s  (Pattern: %s, toplam %d kez görüldü, %s bu pattern'i %d kez yaşadı, diğer takımlar %d kez, sezonlar: %s)",
-                                        team, String.join(", ", last3Norm), predictedScore, p.bagKey, totalOccurrenceCount,
-                                        team, teamOccurrenceCount, totalOccurrenceCount - teamOccurrenceCount,
-                                        String.join(", ", p.seasons));
-                                allPredictions.add(prediction);
-                            }
+                            String prediction = String.format("   🎯 %s - DÖRTLÜ_CYCLE TAHMİN: Son 3 maç [%s] → 4. maç olası skor: %s  (Pattern: %s, toplam %d kez görüldü, %s bu pattern'i %d kez yaşadı, diğer takımlar %d kez, sezonlar: %s)",
+                                    team, String.join(", ", last3Norm), predictedScore, p.bagKey, totalOccurrenceCount,
+                                    team, teamOccurrenceCount, totalOccurrenceCount - teamOccurrenceCount,
+                                    String.join(", ", p.seasons));
+                            allPredictions.add(prediction);
                         }
                     }
                 }

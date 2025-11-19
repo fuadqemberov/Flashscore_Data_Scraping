@@ -11,7 +11,18 @@ import org.openqa.selenium.support.ui.Select;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Scanner;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MackolikPatternDiscoveryOrginal {
@@ -75,7 +86,6 @@ public class MackolikPatternDiscoveryOrginal {
             }
         }
 
-        // YENİ: Sadece REVERSE ve DRAW_INVOLVED kategorileri
         String getHTFTCategory() {
             String htft = getHTFTResult();
 
@@ -119,9 +129,7 @@ public class MackolikPatternDiscoveryOrginal {
             try {
                 int a = Integer.parseInt(parts[0].trim());
                 int b = Integer.parseInt(parts[1].trim());
-                int min = Math.min(a, b);
-                int max = Math.max(a, b);
-                return min + "-" + max;
+                return a + "-" + b;
             } catch (Exception e) {
                 return null;
             }
@@ -141,10 +149,13 @@ public class MackolikPatternDiscoveryOrginal {
         String priorMatch;
         String posteriorMatch;
 
-        // YENİ: Pattern sonrası REVERSE ve DRAW_INVOLVED istatistikleri
         Map<Integer, Integer> reverseAfterGap = new HashMap<>();
         Map<Integer, Integer> drawInvolvedAfterGap = new HashMap<>();
         Map<Integer, Integer> totalAfterGap = new HashMap<>();
+
+        List<List<String>> observedSequences = new ArrayList<>();
+        String bagKey = "";
+        Set<String> teamsInPattern = new HashSet<>();
 
         DiscoveredPattern(String type, String trigger, int gap, String result) {
             this.type = type;
@@ -180,7 +191,6 @@ public class MackolikPatternDiscoveryOrginal {
                     sb.append("🔜 SONRASI: ").append(posteriorMatch).append("\n");
                 }
 
-                // YENİ: Seri sonrası REVERSE/DRAW_INVOLVED analizi
                 if (!reverseAfterGap.isEmpty() || !drawInvolvedAfterGap.isEmpty()) {
                     sb.append("\n📈 SERİ SONRASI ANALİZ:\n");
                     List<Integer> gaps = new ArrayList<>(totalAfterGap.keySet());
@@ -220,7 +230,6 @@ public class MackolikPatternDiscoveryOrginal {
                 sb.append("✅ Tekrar Oranı: ").append(foundCount).append("/").append(totalChecked)
                         .append(" = ").append(String.format("%.1f%%", accuracy)).append("\n");
 
-                // YENİ: Pattern sonrası REVERSE/DRAW_INVOLVED analizi
                 if (!reverseAfterGap.isEmpty() || !drawInvolvedAfterGap.isEmpty()) {
                     sb.append("\n📈 PATTERN SONRASI ANALİZ:\n");
                     List<Integer> gaps = new ArrayList<>(totalAfterGap.keySet());
@@ -269,6 +278,38 @@ public class MackolikPatternDiscoveryOrginal {
                     examples.forEach(ex -> sb.append("   ").append(ex).append("\n"));
                 }
 
+            } else if (type.equals("DORTLU_CYCLE")) {
+                sb.append("🔥 KEŞFEDİLEN DÖRTLÜ ÇEVRİM PATTERN!\n");
+                sb.append("📌 Tip: ").append(type).append("\n");
+                sb.append("🎯 Pattern (Multiset): ").append(bagKey).append("\n");
+                sb.append("📊 Tekrar Sayısı: ").append(foundCount).append(" kez (non-overlapping)\n");
+                sb.append("✅ Başarı: ").append(String.format("%.1f%%", accuracy)).append("\n");
+
+                if (!teamsInPattern.isEmpty()) {
+                    sb.append("👥 Bu Pattern'i Kullanan Takımlar: ").append(String.join(", ", teamsInPattern)).append("\n");
+                }
+
+                if (!seasons.isEmpty()) {
+                    sb.append("🏆 Sezonlar: ").append(String.join(", ", seasons)).append("\n");
+                }
+
+                if (!observedSequences.isEmpty()) {
+                    sb.append("\n🔄 GÖZLENEN ROTASYONLAR:\n");
+                    Set<String> uniqueRots = new HashSet<>();
+                    for (List<String> seq : observedSequences) {
+                        String rot = String.join(" → ", seq);
+                        if (!uniqueRots.contains(rot)) {
+                            uniqueRots.add(rot);
+                            sb.append("   ").append(rot).append("\n");
+                        }
+                    }
+                }
+
+                if (!examples.isEmpty()) {
+                    sb.append("\n🎲 ÖRNEKLER (Toplam ").append(examples.size()).append(" örnek):\n");
+                    examples.forEach(ex -> sb.append("   ").append(ex).append("\n"));
+                }
+
             } else {
                 sb.append("🔥 KEŞFEDİLEN PATTERN!\n");
                 sb.append("📌 Tip: ").append(type).append("\n");
@@ -308,27 +349,43 @@ public class MackolikPatternDiscoveryOrginal {
         }
     }
 
+    static class WindowInfo {
+        int startIndex;
+        String bagKey;
+        List<String> window;
+        String team;
+
+        WindowInfo(int startIndex, String bagKey, List<String> window, String team) {
+            this.startIndex = startIndex;
+            this.bagKey = bagKey;
+            this.window = window;
+            this.team = team;
+        }
+    }
+
     public MackolikPatternDiscoveryOrginal() {
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--start-maximized");
         options.addArguments("--disable-blink-features=AutomationControlled");
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--disable-extensions");
+        options.addArguments("--disable-popup-blocking");
+        options.addArguments("--disable-notifications");
+        options.addArguments("--disable-browser-side-navigation");
+        options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation"});
+        options.setExperimentalOption("useAutomationExtension", false);
+
         driver = new ChromeDriver(options);
+
+        // User-Agent'ı normal bir browser gibi ayarla
+        ((JavascriptExecutor) driver).executeScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})");
         wait = new WebDriverWait(driver, Duration.ofSeconds(20));
     }
 
     public void showAvailableLeagues() {
         System.out.println("🏆 MEVCUT LİGLER:\n");
-
         Map<String, String> leagues = new LinkedHashMap<>();
-        leagues.put("Süper Lig (Türkiye)", "https://arsiv.mackolik.com/Puan-Durumu/1/TURKIYE-Super-Lig");
-        leagues.put("Premier League (İngiltere)", "https://arsiv.mackolik.com/Puan-Durumu/2/INGILTERE-Premier-League");
-        leagues.put("La Liga (İspanya)", "https://arsiv.mackolik.com/Puan-Durumu/6/ISPANYA-La-Liga");
-        leagues.put("Serie A (İtalya)", "https://arsiv.mackolik.com/Puan-Durumu/5/ITALYA-Serie-A");
-        leagues.put("Bundesliga (Almanya)", "https://arsiv.mackolik.com/Puan-Durumu/3/ALMANYA-Bundesliga");
-        leagues.put("Ligue 1 (Fransa)", "https://arsiv.mackolik.com/Puan-Durumu/4/FRANSA-Ligue-1");
-
         int index = 1;
         for (Map.Entry<String, String> entry : leagues.entrySet()) {
             System.out.println(index + ". " + entry.getKey());
@@ -390,14 +447,40 @@ public class MackolikPatternDiscoveryOrginal {
                 String currentSeason = seasonSelect.getFirstSelectedOption().getText().trim();
                 System.out.println("✅ Sezon yüklendi: " + currentSeason);
 
-                WebElement fiksturLink = wait.until(ExpectedConditions.elementToBeClickable(By.linkText("Fikstür")));
-                fiksturLink.click();
-                Thread.sleep(5000);
+                // Fikstür linkini JavaScript ile tıkla - DÜZELTİLDİ
+                try {
+                    WebElement fiksturLink = wait.until(ExpectedConditions.presenceOfElementLocated(By.linkText("Fikstür")));
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", fiksturLink);
+                    Thread.sleep(5000);
+                    System.out.println("✅ Fikstür sayfasına JavaScript ile gidildi");
+                } catch (Exception e) {
+                    System.out.println("⚠️ JavaScript tıklama hatası, alternatif deniyor: " + e.getMessage());
+                    // Alternatif: Doğrudan fikstür URL'sine git
+                    String fiksturUrl = seasonUrl.replace("Standings", "Fixture");
+                    driver.get(fiksturUrl);
+                    Thread.sleep(5000);
+                    System.out.println("✅ Alternatif URL ile fikstür sayfasına gidildi");
+                }
 
-                WebElement firstButton = wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector("span.first")));
-                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", firstButton);
-                Thread.sleep(4000);
-                System.out.println("✅ İlk haftaya gidildi!\n");
+                // İlk haftaya git - JavaScript ile
+                try {
+                    WebElement firstButton = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("span.first")));
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", firstButton);
+                    Thread.sleep(4000);
+                    System.out.println("✅ İlk haftaya JavaScript ile gidildi!\n");
+                } catch (Exception e) {
+                    System.out.println("⚠️ İlk haftaya gitme hatası: " + e.getMessage());
+                    // Hafta seçici ile ilk haftayı seç
+                    try {
+                        WebElement weekSelectElement = wait.until(ExpectedConditions.presenceOfElementLocated(By.id("cboWeek")));
+                        Select weekSelect = new Select(weekSelectElement);
+                        weekSelect.selectByIndex(0);
+                        Thread.sleep(4000);
+                        System.out.println("✅ İlk hafta seçici ile seçildi!\n");
+                    } catch (Exception e2) {
+                        System.out.println("❌ Hafta seçilemedi, devam ediliyor...");
+                    }
+                }
 
                 int weekCounter = 0;
                 int seasonMatchCount = 0;
@@ -437,9 +520,9 @@ public class MackolikPatternDiscoveryOrginal {
                                 String htScore = cells.get(8).getText().trim();
 
                                 if (!ftScore.isEmpty() && !htScore.isEmpty() &&
-                                        ftScore.contains("-") && htScore.contains("-") &&
-                                        !ftScore.equals("-") && !htScore.equals("-") &&
-                                        !ftScore.equals("v")) {
+                                    ftScore.contains("-") && htScore.contains("-") &&
+                                    !ftScore.equals("-") && !htScore.equals("-") &&
+                                    !ftScore.equals("v")) {
                                     match.ftScore = ftScore;
                                     match.htScore = htScore;
                                     allMatches.add(match);
@@ -464,6 +547,7 @@ public class MackolikPatternDiscoveryOrginal {
                             emptyWeekCount = 0;
                         }
 
+                        // Sonraki haftaya JavaScript ile git
                         try {
                             WebElement nextButton = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("span.next")));
                             ((JavascriptExecutor) driver).executeScript("arguments[0].click();", nextButton);
@@ -507,7 +591,6 @@ public class MackolikPatternDiscoveryOrginal {
             }
         }
 
-        // DÜZELTME: Sezon, sonra TARİH bazlı sırala (hafta değil!)
         for (var entry : map.entrySet()) {
             entry.getValue().sort(Comparator
                     .comparing((Match m) -> m.season)
@@ -517,14 +600,12 @@ public class MackolikPatternDiscoveryOrginal {
         return map;
     }
 
-    // Tarih parse yardımcı fonksiyon (DD/MM formatı için)
     private static java.time.LocalDate parseDate(String date) {
         try {
             String[] parts = date.split("/");
             if (parts.length >= 2) {
                 int day = Integer.parseInt(parts[0]);
                 int month = Integer.parseInt(parts[1]);
-                // Yıl yok, varsayılan 2024 kullanalım (sadece sıralama için)
                 return java.time.LocalDate.of(2024, month, day);
             }
         } catch (Exception e) {
@@ -533,20 +614,30 @@ public class MackolikPatternDiscoveryOrginal {
         return java.time.LocalDate.now();
     }
 
-    // YENİ: Pattern sonrası REVERSE/DRAW_INVOLVED analizi yapan yardımcı fonksiyon
-    private void analyzeFollowingMatches(DiscoveredPattern pattern, List<Match> followingMatches, int maxGap) {
-        for (int i = 0; i < maxGap && i < followingMatches.size(); i++) {
-            Match nextMatch = followingMatches.get(i);
-            String category = nextMatch.getHTFTCategory();
+    private static String getSymmetricalScore(Match m, String team) {
+        if (m.ftScore == null || !m.ftScore.contains("-")) return null;
+        String[] parts = m.ftScore.split("-");
+        try {
+            int home = Integer.parseInt(parts[0].trim());
+            int away = Integer.parseInt(parts[1].trim());
 
-            int matchNumber = i + 1; // index 0 -> 1. maç sonra, index 1 -> 2. maç sonra
-            pattern.totalAfterGap.put(matchNumber, pattern.totalAfterGap.getOrDefault(matchNumber, 0) + 1);
-
-            if (category.equals("REVERSE")) {
-                pattern.reverseAfterGap.put(matchNumber, pattern.reverseAfterGap.getOrDefault(matchNumber, 0) + 1);
-            } else if (category.equals("DRAW_INVOLVED")) {
-                pattern.drawInvolvedAfterGap.put(matchNumber, pattern.drawInvolvedAfterGap.getOrDefault(matchNumber, 0) + 1);
+            int teamScore, oppScore;
+            if (m.isHomeTeam(team)) {
+                teamScore = home;
+                oppScore = away;
+            } else if (m.isAwayTeam(team)) {
+                teamScore = away;
+                oppScore = home;
+            } else {
+                return null;
             }
+
+            int min = Math.min(teamScore, oppScore);
+            int max = Math.max(teamScore, oppScore);
+            return min + "-" + max;
+
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -635,7 +726,6 @@ public class MackolikPatternDiscoveryOrginal {
                                 pattern.examples = scoreBtoExamples.get(scoreB);
                                 pattern.seasons = seasonsWithScoreA;
 
-                                // YENİ: weekB'den sonraki maçları analiz et - HER SEZON İÇİN TEK BİR KEZ
                                 List<Match> teamAllMatches = teamMatches.get(team);
                                 if (teamAllMatches != null) {
                                     for (String season : seasonsWithScoreA) {
@@ -643,19 +733,10 @@ public class MackolikPatternDiscoveryOrginal {
                                         if (mB != null) {
                                             int mBIndex = teamAllMatches.indexOf(mB);
                                             if (mBIndex >= 0 && mBIndex < teamAllMatches.size() - 1) {
-                                                // DEBUG: Pattern maçını yazdır
-                                                System.out.println("   [DEBUG] Pattern maçı (mBIndex=" + mBIndex + "): " + mB.date + " " + mB.homeTeam + " vs " + mB.awayTeam);
-
-                                                // Bu sezonun mB maçından sonraki 5 maçı al
                                                 int endIndex = Math.min(mBIndex + 6, teamAllMatches.size());
                                                 for (int k = mBIndex + 1; k < endIndex; k++) {
                                                     Match followingMatch = teamAllMatches.get(k);
-                                                    int gapNumber = k - mBIndex; // 1, 2, 3, 4, 5
-
-                                                    // DEBUG: Sonraki maçları yazdır
-                                                    System.out.println("      [DEBUG] " + gapNumber + ". maç sonra (k=" + k + "): " +
-                                                            followingMatch.date + " " + followingMatch.homeTeam + " vs " + followingMatch.awayTeam +
-                                                            " | HT/FT: " + followingMatch.getHTFTResult() + " | Category: " + followingMatch.getHTFTCategory());
+                                                    int gapNumber = k - mBIndex;
 
                                                     String category = followingMatch.getHTFTCategory();
                                                     pattern.totalAfterGap.put(gapNumber, pattern.totalAfterGap.getOrDefault(gapNumber, 0) + 1);
@@ -779,19 +860,16 @@ public class MackolikPatternDiscoveryOrginal {
                     }
                     seqExamples.computeIfAbsent(key, k -> new ArrayList<>()).add(ex.toString().trim());
 
-                    // EVVEL: seri başlamadan önceki maç
                     if (i > 0 && !seqPrior.containsKey(key)) {
                         Match priorMatch = games.get(i - 1);
                         seqPrior.put(key, priorMatch.ftScore);
                     }
 
-                    // SONRA: seri bittikten sonraki maç
                     if (i + len < games.size() && !seqPosterior.containsKey(key)) {
                         Match posteriorMatch = games.get(i + len);
                         seqPosterior.put(key, posteriorMatch.ftScore);
                     }
 
-                    // YENİ: Seri sonrası maçları kaydet
                     if (i + len < games.size()) {
                         List<Match> followingMatches = games.subList(
                                 i + len,
@@ -815,7 +893,6 @@ public class MackolikPatternDiscoveryOrginal {
                 pattern.seasons = seas;
                 pattern.examples = seqExamples.get(key);
 
-                // Evvel ve sonrası maçlarını ekle
                 if (seqPrior.containsKey(key)) {
                     pattern.priorMatch = "Seri öncesi: " + seqPrior.get(key);
                 }
@@ -823,7 +900,6 @@ public class MackolikPatternDiscoveryOrginal {
                     pattern.posteriorMatch = "Seri sonrası: " + seqPosterior.get(key);
                 }
 
-                // YENİ: Seri sonrası REVERSE/DRAW_INVOLVED analizi
                 List<List<Match>> allFollowing = seqFollowingMatches.get(key);
                 if (allFollowing != null) {
                     for (List<Match> followingMatches : allFollowing) {
@@ -831,7 +907,7 @@ public class MackolikPatternDiscoveryOrginal {
                             Match nextMatch = followingMatches.get(i);
                             String category = nextMatch.getHTFTCategory();
 
-                            int matchNumber = i + 1; // 0 -> 1. maç, 1 -> 2. maç
+                            int matchNumber = i + 1;
                             pattern.totalAfterGap.put(matchNumber, pattern.totalAfterGap.getOrDefault(matchNumber, 0) + 1);
 
                             if (category.equals("REVERSE")) {
@@ -848,6 +924,155 @@ public class MackolikPatternDiscoveryOrginal {
         }
 
         System.out.println("✅ " + discovered.size() + " seri skor pattern bulundu!\n");
+        return discovered;
+    }
+
+    public List<DiscoveredPattern> discoverQuartetCyclePatterns(List<Match> matches) {
+        System.out.println("🔍 DÖRTLÜ ÇEVRİM (4-lü) PATTERN'LERİ ARANIYOR - TERS SKORLAR VE SIRA FARKETMEZ (ÇOK SEZONLU)...\n");
+
+        Map<String, List<String>> bagKeyToOccurrences = new HashMap<>();
+        Map<String, List<String>> bagKeyToExamples = new HashMap<>();
+        Map<String, Set<String>> bagKeyToSeasons = new HashMap<>();
+        Map<String, Set<String>> bagKeyToTeams = new HashMap<>();
+
+        Map<String, List<String>> occurrenceToWindow = new HashMap<>();
+        Map<String, String> occurrenceToTeam = new HashMap<>();
+
+        Map<String, List<Match>> teamMatches = groupByTeamAllSeasons(matches);
+
+        for (String team : teamMatches.keySet()) {
+            List<Match> games = teamMatches.get(team);
+            List<String> normScores = new ArrayList<>();
+            List<String> seasonsList = new ArrayList<>();
+
+            for (Match m : games) {
+                String norm = getSymmetricalScore(m, team);
+                normScores.add(norm);
+                seasonsList.add(m.season);
+            }
+
+            Map<String, List<Integer>> seasonToIndices = new HashMap<>();
+            for (int i = 0; i < seasonsList.size(); i++) {
+                String season = seasonsList.get(i);
+                seasonToIndices.computeIfAbsent(season, k -> new ArrayList<>()).add(i);
+            }
+
+            for (String season : seasonToIndices.keySet()) {
+                List<Integer> indices = seasonToIndices.get(season);
+
+                List<WindowInfo> windows = new ArrayList<>();
+
+                for (int idx : indices) {
+                    if (idx + 4 <= normScores.size()) {
+                        List<String> window = normScores.subList(idx, idx + 4);
+                        if (window.stream().anyMatch(Objects::isNull)) continue;
+
+                        List<String> sorted = new ArrayList<>(window);
+                        Collections.sort(sorted);
+                        String bagKey = String.join("|", sorted);
+
+                        windows.add(new WindowInfo(idx, bagKey, new ArrayList<>(window), team));
+                    }
+                }
+
+                Map<String, List<WindowInfo>> bagKeyToWindows = new HashMap<>();
+                for (WindowInfo wi : windows) {
+                    bagKeyToWindows.computeIfAbsent(wi.bagKey, k -> new ArrayList<>()).add(wi);
+                }
+
+                for (String bagKey : bagKeyToWindows.keySet()) {
+                    List<WindowInfo> candidateWindows = bagKeyToWindows.get(bagKey);
+
+                    candidateWindows.sort(Comparator.comparingInt(w -> w.startIndex));
+
+                    List<WindowInfo> selected = new ArrayList<>();
+                    int lastEnd = -1;
+
+                    for (WindowInfo wi : candidateWindows) {
+                        if (wi.startIndex >= lastEnd) {
+                            selected.add(wi);
+                            lastEnd = wi.startIndex + 4;
+                        }
+                    }
+
+                    for (WindowInfo wi : selected) {
+                        String occurrenceKey = team + "|" + season + "|" + wi.startIndex;
+                        bagKeyToOccurrences.computeIfAbsent(bagKey, k -> new ArrayList<>()).add(occurrenceKey);
+                        occurrenceToWindow.put(occurrenceKey, wi.window);
+                        occurrenceToTeam.put(occurrenceKey, team);
+                        bagKeyToSeasons.computeIfAbsent(bagKey, k -> new HashSet<>()).add(season);
+                        bagKeyToTeams.computeIfAbsent(bagKey, k -> new HashSet<>()).add(team);
+
+                        StringBuilder detailedExample = new StringBuilder();
+                        detailedExample.append(team).append(" | Sezon: ").append(season)
+                                .append(" | Başlangıç İndeks: ").append(wi.startIndex).append("\n");
+
+                        for (int matchIdx = 0; matchIdx < 4 && (wi.startIndex + matchIdx) < games.size(); matchIdx++) {
+                            Match m = games.get(wi.startIndex + matchIdx);
+                            String symScore = getSymmetricalScore(m, team);
+                            detailedExample.append(String.format("      %d. Maç (%s): %s vs %s | HT: %s | FT: %s | Sym: %s\n",
+                                    matchIdx + 1,
+                                    m.date,
+                                    m.homeTeam,
+                                    m.awayTeam,
+                                    m.htScore != null ? m.htScore : "?",
+                                    m.ftScore != null ? m.ftScore : "?",
+                                    symScore != null ? symScore : "?"));
+                        }
+
+                        bagKeyToExamples.computeIfAbsent(bagKey, k -> new ArrayList<>()).add(detailedExample.toString().trim());
+
+                        System.out.println("[DEBUG] NON-OVERLAP eklendi: team=" + team + " season=" + season +
+                                           " startIdx=" + wi.startIndex + " window=" + String.join(", ", wi.window) + " bagKey=" + bagKey);
+                    }
+                }
+            }
+        }
+
+        List<DiscoveredPattern> discovered = new ArrayList<>();
+
+        for (String bagKey : bagKeyToOccurrences.keySet()) {
+            List<String> occurrences = bagKeyToOccurrences.get(bagKey);
+            Set<String> seasons = bagKeyToSeasons.getOrDefault(bagKey, Collections.emptySet());
+            Set<String> teams = bagKeyToTeams.getOrDefault(bagKey, Collections.emptySet());
+
+            if (occurrences.size() >= 2) {
+                DiscoveredPattern pattern = new DiscoveredPattern("DORTLU_CYCLE", bagKey, 0, "");
+                pattern.bagKey = bagKey;
+                pattern.foundCount = occurrences.size();
+                pattern.totalChecked = occurrences.size();
+                pattern.calculate();
+                pattern.seasons = new ArrayList<>(seasons);
+                pattern.examples = bagKeyToExamples.getOrDefault(bagKey, new ArrayList<>());
+                pattern.teamsInPattern = teams;
+
+                Set<String> uniqueSeqs = new HashSet<>();
+                pattern.observedSequences = new ArrayList<>();
+
+                for (String occ : occurrences) {
+                    List<String> window = occurrenceToWindow.get(occ);
+                    String rep = String.join("|", window);
+                    if (!uniqueSeqs.contains(rep)) {
+                        uniqueSeqs.add(rep);
+                        pattern.observedSequences.add(new ArrayList<>(window));
+                    }
+                }
+
+                System.out.println("[DEBUG] PATTERN KABUL! bagKey=" + bagKey +
+                                   " gerçek_tekrar=" + occurrences.size() +
+                                   " sezonlar=" + seasons.size() +
+                                   " takımlar=" + String.join(", ", teams) +
+                                   " occurrences=" + String.join(", ", occurrences));
+
+                discovered.add(pattern);
+            } else {
+                System.out.println("[DEBUG] PATTERN RED! bagKey=" + bagKey +
+                                   " gerçek_tekrar=" + occurrences.size() + " (gereken: >=2)" +
+                                   " occurrences=" + String.join(", ", occurrences));
+            }
+        }
+
+        System.out.println("✅ " + discovered.size() + " dörtlü cycle pattern bulundu!\n");
         return discovered;
     }
 
@@ -979,12 +1204,10 @@ public class MackolikPatternDiscoveryOrginal {
         if (driver != null) driver.quit();
     }
 
-    // YENİ: Gelecek hafta tahminleri
     public void predictUpcomingWeek(List<Match> allMatches, List<DiscoveredPattern> patterns, String leagueUrl) {
         System.out.println("\n🔮🔮🔮 GELECEK HAFTA TAHMİNLERİ 🔮🔮🔮\n");
 
         try {
-            // Son sezonu ve haftayı bul
             String lastSeason = allMatches.stream()
                     .map(m -> m.season)
                     .max(Comparator.naturalOrder())
@@ -1000,16 +1223,12 @@ public class MackolikPatternDiscoveryOrginal {
             System.out.println("⚽ Son Oynanan Hafta: " + lastPlayedWeek);
             System.out.println("⏳ Fikstür yükleniyor...\n");
 
-            // Sayfaya git
             driver.get(leagueUrl);
             Thread.sleep(4000);
 
-            // Sezonu seç
             try {
                 WebElement seasonSelect = wait.until(ExpectedConditions.presenceOfElementLocated(By.id("cboSeason")));
                 Select select = new Select(seasonSelect);
-
-                // İlk seçeneği seç (güncel sezon)
                 select.selectByIndex(0);
                 System.out.println("✅ Güncel sezon seçildi");
                 Thread.sleep(3000);
@@ -1018,7 +1237,6 @@ public class MackolikPatternDiscoveryOrginal {
                 return;
             }
 
-            // Fikstüre git - otomatik olarak mevcut/gelecek haftayı gösterir
             try {
                 WebElement fiksturLink = wait.until(ExpectedConditions.elementToBeClickable(By.linkText("Fikstür")));
                 fiksturLink.click();
@@ -1029,7 +1247,6 @@ public class MackolikPatternDiscoveryOrginal {
                 return;
             }
 
-            // Mevcut haftayı oku (dropdown'dan)
             int currentWeek = lastPlayedWeek + 1;
             try {
                 WebElement weekSelect = wait.until(ExpectedConditions.presenceOfElementLocated(By.id("cboWeek")));
@@ -1037,13 +1254,11 @@ public class MackolikPatternDiscoveryOrginal {
                 String selectedWeek = weekSelectObj.getFirstSelectedOption().getText();
                 System.out.println("📋 Gösterilen hafta: " + selectedWeek);
 
-                // Hafta numarasını çıkar - sadece ilk sayıyı al
                 if (selectedWeek.matches(".*\\d+.*")) {
                     String numOnly = selectedWeek.replaceAll("\\D+", " ").trim().split(" ")[0];
                     try {
                         currentWeek = Integer.parseInt(numOnly);
                     } catch (Exception e) {
-                        // Varsayılan değeri kullan
                     }
                 }
             } catch (Exception e) {
@@ -1052,7 +1267,6 @@ public class MackolikPatternDiscoveryOrginal {
 
             System.out.println("🎯 Analiz Edilen Hafta: " + currentWeek + "\n");
 
-            // Maçları oku
             try {
                 WebElement table = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("#dvFixtureInner table.list-table")));
                 List<WebElement> rows = table.findElements(By.cssSelector("tbody tr"));
@@ -1077,7 +1291,6 @@ public class MackolikPatternDiscoveryOrginal {
 
                         if (homeTeam.isEmpty() || awayTeam.isEmpty()) continue;
 
-                        // Maç skoru kontrol et - eğer skor varsa atlama (çünkü hem oynanacak hem oynanan maçlar olabilir)
                         String score = "";
                         if (cells.size() > 5) {
                             score = cells.get(5).getText().trim();
@@ -1092,12 +1305,10 @@ public class MackolikPatternDiscoveryOrginal {
                             System.out.println("⚽ Skor: " + score + " (Maç oynandı)");
                         }
 
-                        // Pattern analizi
                         boolean found = analyzePatternsForMatch(homeTeam, awayTeam, currentWeek, lastSeason, allMatches, patterns);
                         if (found) predictionCount++;
 
                     } catch (Exception e) {
-                        // Skip
                     }
                 }
 
@@ -1127,19 +1338,16 @@ public class MackolikPatternDiscoveryOrginal {
 
         List<String> allPredictions = new ArrayList<>();
 
-        // Her iki takım için de pattern kontrol et
         for (String team : Arrays.asList(homeTeam, awayTeam)) {
 
-            // 1. HAFTA-SKOR TEKRAR Pattern kontrol - SADECE EN İYİSİNİ AL
             DiscoveredPattern bestWeekPattern = null;
             double bestAccuracy = 0;
 
             for (DiscoveredPattern p : patterns) {
                 if (p.type.equals("HAFTA_SKOR_TEKRAR") &&
-                        p.triggerValue.contains("W" + week + ":") &&
-                        p.accuracy > bestAccuracy) {
+                    p.triggerValue.contains("W" + week + ":") &&
+                    p.accuracy > bestAccuracy) {
 
-                    // Bu pattern bu takım için mi kontrol et
                     boolean isForThisTeam = false;
                     for (String example : p.examples) {
                         if (example.contains(team)) {
@@ -1159,7 +1367,6 @@ public class MackolikPatternDiscoveryOrginal {
                 String prediction = String.format("   🎯 %s - HAFTA PATTERN: %s (%.0f%% doğru)",
                         team, bestWeekPattern.triggerValue, bestWeekPattern.accuracy);
 
-                // Tahmin istatistiklerini ekle
                 boolean hasPrediction = false;
                 if (!bestWeekPattern.totalAfterGap.isEmpty()) {
                     int total = bestWeekPattern.totalAfterGap.getOrDefault(1, 0);
@@ -1177,7 +1384,6 @@ public class MackolikPatternDiscoveryOrginal {
                             prediction += String.format(" → 🔥 1/X-2/X %.0f%%", drawPerc);
                             hasPrediction = true;
                         } else if (reversePerc > 0 || drawPerc > 0) {
-                            // Düşük olasılık ama yine de göster
                             if (reversePerc > drawPerc && reversePerc >= 30) {
                                 prediction += String.format(" → ✅ 1/2-2/1 %.0f%%", reversePerc);
                                 hasPrediction = true;
@@ -1196,7 +1402,6 @@ public class MackolikPatternDiscoveryOrginal {
                 allPredictions.add(prediction);
             }
 
-            // 2. SERİ SKOR Pattern kontrol - SADECE EN İYİSİNİ AL
             List<Match> teamMatches = allMatches.stream()
                     .filter(m -> (m.homeTeam.equals(team) || m.awayTeam.equals(team)) && m.season.equals(season))
                     .filter(m -> m.week < week)
@@ -1220,8 +1425,8 @@ public class MackolikPatternDiscoveryOrginal {
 
                             for (DiscoveredPattern p : patterns) {
                                 if (p.type.equals("SERI_SKOR") &&
-                                        p.triggerValue.equals(seriesKey) &&
-                                        p.foundCount > bestSeriesCount) {
+                                    p.triggerValue.equals(seriesKey) &&
+                                    p.foundCount > bestSeriesCount) {
                                     bestSeriesPattern = p;
                                     bestSeriesCount = p.foundCount;
                                 }
@@ -1239,8 +1444,6 @@ public class MackolikPatternDiscoveryOrginal {
                     prediction += " → " + bestSeriesPattern.posteriorMatch;
                 }
 
-                // Tahmin istatistiklerini ekle
-                boolean hasPrediction = false;
                 if (!bestSeriesPattern.totalAfterGap.isEmpty()) {
                     int total = bestSeriesPattern.totalAfterGap.getOrDefault(1, 0);
                     int reverse = bestSeriesPattern.reverseAfterGap.getOrDefault(1, 0);
@@ -1250,33 +1453,127 @@ public class MackolikPatternDiscoveryOrginal {
                         double reversePerc = (double) reverse / total * 100;
                         double drawPerc = (double) drawInv / total * 100;
 
-                        if (reversePerc >= 50) {
-                            prediction += String.format(" | 🔥 1/2-2/1 %.0f%%", reversePerc);
-                            hasPrediction = true;
-                        } else if (drawPerc >= 50) {
-                            prediction += String.format(" | 🔥 1/X-2/X %.0f%%", drawPerc);
-                            hasPrediction = true;
-                        } else if (reversePerc > 0 || drawPerc > 0) {
-                            if (reversePerc > drawPerc && reversePerc >= 30) {
-                                prediction += String.format(" | ✅ 1/2-2/1 %.0f%%", reversePerc);
-                                hasPrediction = true;
-                            } else if (drawPerc >= 30) {
-                                prediction += String.format(" | ✅ 1/X-2/X %.0f%%", drawPerc);
-                                hasPrediction = true;
-                            }
+                        if (reversePerc >= 50 || drawPerc >= 50) {
+                            String emoji = reversePerc > drawPerc ? "🔥 1/2-2/1" : "🔥 1/X-2/X";
+                            double perc = Math.max(reversePerc, drawPerc);
+                            prediction += String.format(" → %s %.0f%%", emoji, perc);
                         }
                     }
                 }
 
-                if (!hasPrediction) {
-                    prediction += " | ⚠️ Tahmin verisi yetersiz";
-                }
-
                 allPredictions.add(prediction);
+            }
+
+            // DÖRTLÜ CYCLE pattern kontrolü
+            if (teamMatches.size() >= 3) {
+                List<Match> last3 = teamMatches.subList(Math.max(0, teamMatches.size() - 3), teamMatches.size());
+                List<String> last3Norm = last3.stream()
+                        .map(m -> getSymmetricalScore(m, team))
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+
+                if (last3Norm.size() == 3) {
+                    List<String> last4Norm = null;
+                    List<String> last5Norm = null;
+
+                    if (teamMatches.size() >= 4) {
+                        List<Match> last4 = teamMatches.subList(teamMatches.size() - 4, teamMatches.size());
+                        last4Norm = last4.stream()
+                                .map(m -> getSymmetricalScore(m, team))
+                                .filter(Objects::nonNull)
+                                .collect(Collectors.toList());
+                    }
+
+                    if (teamMatches.size() >= 5) {
+                        List<Match> last5 = teamMatches.subList(teamMatches.size() - 5, teamMatches.size());
+                        last5Norm = last5.stream()
+                                .map(m -> getSymmetricalScore(m, team))
+                                .filter(Objects::nonNull)
+                                .collect(Collectors.toList());
+                    }
+
+                    for (DiscoveredPattern p : patterns) {
+                        if (!p.type.equals("DORTLU_CYCLE")) continue;
+
+                        if (p.bagKey == null || p.bagKey.isEmpty()) continue;
+
+                        String[] bagElems = p.bagKey.split("\\|");
+                        Map<String, Integer> bagCounts = new HashMap<>();
+                        for (String be : bagElems) bagCounts.put(be, bagCounts.getOrDefault(be, 0) + 1);
+
+                        if (last4Norm != null && last4Norm.size() == 4) {
+                            Map<String, Integer> last4Counts = new HashMap<>();
+                            for (String s : last4Norm) last4Counts.put(s, last4Counts.getOrDefault(s, 0) + 1);
+
+                            boolean exactMatch = bagCounts.equals(last4Counts);
+
+                            if (exactMatch) {
+                                System.out.println("[DEBUG] " + team + " - Pattern zaten tamamlanmış (son 4 maç): " + String.join(", ", last4Norm));
+                                continue;
+                            }
+                        }
+
+                        if (last5Norm != null && last5Norm.size() == 5) {
+                            List<String> first4of5 = last5Norm.subList(0, 4);
+                            Map<String, Integer> first4Counts = new HashMap<>();
+                            for (String s : first4of5) first4Counts.put(s, first4Counts.getOrDefault(s, 0) + 1);
+
+                            if (bagCounts.equals(first4Counts)) {
+                                System.out.println("[DEBUG] " + team + " - Pattern 1 maç önce tamamlanmış, yeni cycle başlamış olabilir");
+                                continue;
+                            }
+                        }
+
+                        Map<String, Integer> last3Counts = new HashMap<>();
+                        for (String s : last3Norm) last3Counts.put(s, last3Counts.getOrDefault(s, 0) + 1);
+
+                        boolean allPresent = true;
+                        for (var entry : last3Counts.entrySet()) {
+                            String key = entry.getKey();
+                            int need = entry.getValue();
+                            if (bagCounts.getOrDefault(key, 0) < need) {
+                                allPresent = false;
+                                break;
+                            }
+                        }
+
+                        if (!allPresent) continue;
+
+                        Map<String, Integer> diff = new HashMap<>(bagCounts);
+                        for (var entry : last3Counts.entrySet()) {
+                            diff.put(entry.getKey(), diff.get(entry.getKey()) - entry.getValue());
+                        }
+
+                        List<String> missing = new ArrayList<>();
+                        for (var entry : diff.entrySet()) {
+                            for (int c = 0; c < entry.getValue(); c++) missing.add(entry.getKey());
+                        }
+
+                        if (missing.size() == 1) {
+                            String predictedScore = missing.get(0);
+
+                            // Bu takımın bu pattern'de kaç kez yer aldığını hesapla
+                            int teamOccurrenceCount = 0;
+                            int totalOccurrenceCount = p.foundCount;
+
+                            // Pattern'in örneklerinden bu takımın kaç kez geçtiğini say
+                            for (String example : p.examples) {
+                                if (example.startsWith(team + " |")) {
+                                    teamOccurrenceCount++;
+                                }
+                            }
+
+                            String prediction = String.format("   🎯 %s - DÖRTLÜ_CYCLE TAHMİN: Son 3 maç [%s] → 4. maç olası skor: %s  (Pattern: %s, toplam %d kez görüldü, %s bu pattern'i %d kez yaşadı, diğer takımlar %d kez, sezonlar: %s)",
+                                    team, String.join(", ", last3Norm), predictedScore, p.bagKey, totalOccurrenceCount,
+                                    team, teamOccurrenceCount, totalOccurrenceCount - teamOccurrenceCount,
+                                    String.join(", ", p.seasons));
+                            allPredictions.add(prediction);
+                        }
+                    }
+                }
             }
         }
 
-        // Tahminleri yazdır
         if (!allPredictions.isEmpty()) {
             System.out.println("\n   💡 PATTERN TAHMİNLERİ:");
             for (String pred : allPredictions) {
@@ -1294,12 +1591,13 @@ public class MackolikPatternDiscoveryOrginal {
         Scanner scanner = new Scanner(System.in);
 
         try {
-            System.out.println("🔥🔥🔥 ÇOK SEZONLU PATTERN KEŞİF MAKİNESİ V4 🔥🔥🔥\n");
+            System.out.println("🔥🔥🔥 ÇOK SEZONLU PATTERN KEŞİF MAKİNESİ V5 - DÜZELTİLMİŞ 🔥🔥🔥\n");
             System.out.println("🎯 YENİ ÖZELLİKLER:");
             System.out.println("   ✅ HT/FT sadece REVERSE (1/2, 2/1) ve DRAW_INVOLVED (1/X, 2/X)");
-            System.out.println("   ✅ Pattern sonrası 1, 2, 3, 4, 5 maç analizi (doğru sayım)");
-            System.out.println("   ✅ Her pattern için REVERSE/DRAW_INVOLVED istatistikleri");
-            System.out.println("   ✅ Detaylı örnekler (tarih, takımlar, skorlar)\n");
+            System.out.println("   ✅ Pattern sonrası 1, 2, 3, 4, 5 maç analizi");
+            System.out.println("   ✅ DÖRTLÜ CYCLE: Ters skorlar aynı (0-1=1-0), sıra farketmez");
+            System.out.println("   ✅ Non-overlapping pencereler (gerçek tekrarlar)");
+            System.out.println("   ✅ Takım bazlı pattern kullanım istatistikleri\n");
 
             analyzer.showAvailableLeagues();
             System.out.print("\n🎯 Lig URL'sini yapıştırın (varsayılan Süper Lig): ");
@@ -1358,6 +1656,7 @@ public class MackolikPatternDiscoveryOrginal {
             allPatterns.addAll(analyzer.discoverRecurringScorePatterns(matches));
             allPatterns.addAll(analyzer.discoverReverseScorePatterns(matches));
             allPatterns.addAll(analyzer.discoverSerialScorePatterns(matches));
+            allPatterns.addAll(analyzer.discoverQuartetCyclePatterns(matches));
             allPatterns.addAll(analyzer.discoverWeekBasedPatterns(matches));
 
             allPatterns.sort((a, b) -> Double.compare(b.accuracy, a.accuracy));
@@ -1372,14 +1671,9 @@ public class MackolikPatternDiscoveryOrginal {
                 showPatternStatistics(allPatterns);
             }
 
-            // YENİ: Gelecek hafta tahminleri
             System.out.println("\n" + "🎯".repeat(30));
-            System.out.print("\n💡 Gelecek hafta için tahmin yapmak ister misiniz? (E/H): ");
-            String predictChoice = scanner.nextLine().trim().toUpperCase();
 
-            if (predictChoice.equals("E") || predictChoice.equals("EVET")) {
-                analyzer.predictUpcomingWeek(matches, allPatterns, leagueUrl);
-            }
+            analyzer.predictUpcomingWeek(matches, allPatterns, leagueUrl);
 
         } catch (Exception e) {
             e.printStackTrace();
