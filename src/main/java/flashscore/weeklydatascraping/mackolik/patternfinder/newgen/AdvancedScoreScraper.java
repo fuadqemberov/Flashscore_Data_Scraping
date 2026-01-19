@@ -38,9 +38,10 @@ public class AdvancedScoreScraper {
     }
 
     /**
-     * Mevcut sezondaki son oynanmış maçı bulur ve bir desen olarak döndürür.
+     * Mevcut sezondaki SONDAN N. MAÇI bulur ve bir desen olarak döndürür.
+     * @param matchesBack 1 = sondan 1. maç (son maç), 2 = sondan 2. maç, vb.
      */
-    public static AdvancedMatchPattern findLastMatchPattern(CloseableHttpClient httpClient, int teamId) throws IOException, RuntimeException {
+    public static AdvancedMatchPattern findLastMatchPattern(CloseableHttpClient httpClient, int teamId, int matchesBack) throws IOException, RuntimeException {
         String currentSeasonUrl = String.format(BASE_URL, teamId, CURRENT_SEASON);
         String html = fetchHtml(httpClient, currentSeasonUrl);
         if (html == null) throw new RuntimeException("Could not fetch current season page for team ID: " + teamId);
@@ -78,28 +79,38 @@ public class AdvancedScoreScraper {
                     nextHomeTeam = home;
                     nextAwayTeam = away;
                     foundUnplayed = true;
-                    // Sonraki maçı bulduktan sonra döngüden çıkabiliriz.
                 }
             }
         }
 
-        if (!scores.isEmpty()) {
-            int lastIndex = scores.size() - 1;
-            String lastScore = scores.get(lastIndex);
-            String lastHome = homeTeams.get(lastIndex);
-            String lastAway = awayTeams.get(lastIndex);
+        // Oynanmış maçlar listesinden SONDAN matchesBack. MAÇI AL
+        if (scores.size() >= matchesBack) {
+            int targetIndex = scores.size() - matchesBack;
+            String targetScore = scores.get(targetIndex);
+            String targetHome = homeTeams.get(targetIndex);
+            String targetAway = awayTeams.get(targetIndex);
 
-            log.info("Found last match for team ID {}: {} {} {}", teamId, lastHome, lastScore, lastAway);
-            return new AdvancedMatchPattern(lastHome, lastAway, lastScore, teamName, nextHomeTeam, nextAwayTeam);
+            log.info("Baz alınan maç (sondan {}. maç) for team ID {}: {} {} {}",
+                    matchesBack, teamId, targetHome, targetScore, targetAway);
+            return new AdvancedMatchPattern(targetHome, targetAway, targetScore, teamName, nextHomeTeam, nextAwayTeam);
         } else {
-            throw new RuntimeException("Hiç tamamlanmış maç bulunamadı for team ID: " + teamId);
+            throw new RuntimeException(String.format("Yeterli tamamlanmış maç bulunamadı for team ID: %d (Gerekli: %d, Bulunan: %d)",
+                    teamId, matchesBack, scores.size()));
         }
     }
 
     /**
      * Verilen deseni geçmiş sezonlarda arar.
+     * Pattern bulunduğunda, ondan matchesForward MAÇ SONRAKİ SONUCU gösterir.
+     * @param matchesForward Kaç maç sonrasını göstereceği (1, 2, 3, 4)
      */
-    public static List<AdvancedMatchResult> findHistoricalMatchPatterns(CloseableHttpClient httpClient, AdvancedMatchPattern pattern, String seasonYear, int teamId) throws IOException {
+    public static List<AdvancedMatchResult> findHistoricalMatchPatterns(
+            CloseableHttpClient httpClient,
+            AdvancedMatchPattern pattern,
+            String seasonYear,
+            int teamId,
+            int matchesForward) throws IOException {
+
         List<AdvancedMatchResult> foundResults = new ArrayList<>();
         String seasonUrl = String.format(BASE_URL, teamId, seasonYear);
         String html = fetchHtml(httpClient, seasonUrl);
@@ -133,7 +144,7 @@ public class AdvancedScoreScraper {
 
                 // Desenle eşleşme kontrolü (takımlar ve skor aynı olmalı)
                 boolean teamsMatch = (homeTeam.equals(pattern.homeTeam) && awayTeam.equals(pattern.awayTeam)) ||
-                        (homeTeam.equals(pattern.awayTeam) && awayTeam.equals(pattern.homeTeam));
+                                     (homeTeam.equals(pattern.awayTeam) && awayTeam.equals(pattern.homeTeam));
 
                 if (score.equals(pattern.score) && teamsMatch) {
                     log.info("Pattern match found for team {}, season {} -> {} {} {}", teamId, seasonYear, homeTeam, score, awayTeam);
@@ -141,18 +152,31 @@ public class AdvancedScoreScraper {
                     String htScore = row.selectFirst("td:nth-child(9)").text().trim();
                     AdvancedMatchResult result = new AdvancedMatchResult(homeTeam, awayTeam, score, htScore, seasonYear, pattern);
 
-                    // Önceki maçı al
+                    // ÖNCEKİ MAÇI AL (pattern'den 1 maç önce)
                     if (i > 0) {
                         result.previousMatchInfo = getMatchInfo(leagueMatches.get(i - 1));
                     } else {
                         result.previousMatchInfo = "Bilgi Yok (Sezonun İlk Maçı)";
                     }
 
-                    // Sonraki maçı al
-                    if (i + 1 < leagueMatches.size()) {
-                        result.nextMatchInfo = getMatchInfo(leagueMatches.get(i + 1));
+                    // matchesForward MAÇ SONRAKİ SONUCU AL (1, 2, 3, veya 4 maç sonra)
+                    if (i + matchesForward < leagueMatches.size()) {
+                        result.nextMatchInfo = getMatchInfo(leagueMatches.get(i + matchesForward));
+                        log.info("{} maç sonraki sonuç: {}", matchesForward, result.nextMatchInfo);
                     } else {
-                        result.nextMatchInfo = "Bilgi Yok (Sezonun Son Maçı)";
+                        // Yeterli maç yoksa mevcut olanları göster
+                        StringBuilder availableMatches = new StringBuilder("UYARI: ");
+                        int availableCount = leagueMatches.size() - i - 1;
+                        if (availableCount > 0) {
+                            availableMatches.append(String.format("Sadece %d maç sonrası var -> ", availableCount));
+                            for (int j = 1; j <= availableCount; j++) {
+                                availableMatches.append(getMatchInfo(leagueMatches.get(i + j)));
+                                if (j < availableCount) availableMatches.append(" | ");
+                            }
+                        } else {
+                            availableMatches.append(String.format("Sezonun son maçı, %d maç sonrası yok", matchesForward));
+                        }
+                        result.nextMatchInfo = availableMatches.toString();
                     }
 
                     foundResults.add(result);

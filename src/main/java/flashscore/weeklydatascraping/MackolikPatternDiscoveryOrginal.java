@@ -1508,7 +1508,7 @@ public class MackolikPatternDiscoveryOrginal {
                             boolean exactMatch = bagCounts.equals(last4Counts);
 
                             if (exactMatch) {
-                                System.out.println("[DEBUG] " + team + " - Pattern zaten tamamlanmış (son 4 maç): " + String.join(", ", last4Norm));
+                                // 1. DEĞİŞİKLİK: Pattern tamamlanmışsa debug yazısını kaldırdım
                                 continue;
                             }
                         }
@@ -1519,7 +1519,7 @@ public class MackolikPatternDiscoveryOrginal {
                             for (String s : first4of5) first4Counts.put(s, first4Counts.getOrDefault(s, 0) + 1);
 
                             if (bagCounts.equals(first4Counts)) {
-                                System.out.println("[DEBUG] " + team + " - Pattern 1 maç önce tamamlanmış, yeni cycle başlamış olabilir");
+                                // 1. DEĞİŞİKLİK: Pattern 1 maç önce tamamlanmışsa debug yazısını kaldırdım
                                 continue;
                             }
                         }
@@ -1563,11 +1563,14 @@ public class MackolikPatternDiscoveryOrginal {
                                 }
                             }
 
-                            String prediction = String.format("   🎯 %s - DÖRTLÜ_CYCLE TAHMİN: Son 3 maç [%s] → 4. maç olası skor: %s  (Pattern: %s, toplam %d kez görüldü, %s bu pattern'i %d kez yaşadı, diğer takımlar %d kez, sezonlar: %s)",
-                                    team, String.join(", ", last3Norm), predictedScore, p.bagKey, totalOccurrenceCount,
-                                    team, teamOccurrenceCount, totalOccurrenceCount - teamOccurrenceCount,
-                                    String.join(", ", p.seasons));
-                            allPredictions.add(prediction);
+                            // 2. DEĞİŞİKLİK: Sadece 1 ve daha fazla kez yaşanmış pattern'leri göster
+                            if (teamOccurrenceCount >= 1) {
+                                String prediction = String.format("   🎯 %s - DÖRTLÜ_CYCLE TAHMİN: Son 3 maç [%s] → 4. maç olası skor: %s  (Pattern: %s, toplam %d kez görüldü, %s bu pattern'i %d kez yaşadı, diğer takımlar %d kez, sezonlar: %s)",
+                                        team, String.join(", ", last3Norm), predictedScore, p.bagKey, totalOccurrenceCount,
+                                        team, teamOccurrenceCount, totalOccurrenceCount - teamOccurrenceCount,
+                                        String.join(", ", p.seasons));
+                                allPredictions.add(prediction);
+                            }
                         }
                     }
                 }
