@@ -3,7 +3,6 @@ package flashscore.weeklydatascraping.mackolik.patternfinder;
 import java.util.HashSet;
 import java.util.Set;
 
-// Keep MatchPattern as is
 class MatchPattern {
     public String score1;
     public String score2;
@@ -11,9 +10,11 @@ class MatchPattern {
     public String awayTeam1;
     public String homeTeam2;
     public String awayTeam2;
-    public String teamName; // Add team name for context in results
-    public String nextHomeTeam; // Added for next unplayed match
-    public String nextAwayTeam; // Added for next unplayed match
+    public String teamName;
+    public String nextHomeTeam;
+    public String nextAwayTeam;
+    public String middleHomeTeam; // ara maç ev sahibi
+    public String middleAwayTeam; // ara maç deplasman
 
     public MatchPattern(String score1, String score2, String homeTeam1, String awayTeam1,
                         String homeTeam2, String awayTeam2, String teamName,
@@ -27,107 +28,63 @@ class MatchPattern {
         this.teamName = teamName;
         this.nextHomeTeam = nextHomeTeam;
         this.nextAwayTeam = nextAwayTeam;
+        this.middleHomeTeam = nextHomeTeam;
+        this.middleAwayTeam = nextAwayTeam;
     }
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("%s vs %s -> %s\n%s vs %s -> %s",
-                homeTeam1, awayTeam1, score1,
-                homeTeam2, awayTeam2, score2));
-        if (nextHomeTeam != null && nextAwayTeam != null) {
-            sb.append("\n").append(nextHomeTeam).append(" vs ").append(nextAwayTeam).append(" -> Henüz oynanmadı");
-        }
+        sb.append(String.format("%s vs %s -> %s\n", homeTeam1, awayTeam1, score1));
+        if (middleHomeTeam != null)
+            sb.append(String.format("%s vs %s -> ??? (ARA MAC - tahmin)\n", middleHomeTeam, middleAwayTeam));
+        if (homeTeam2 != null)
+            sb.append(String.format("%s vs %s -> Henuz oynanmadi", homeTeam2, awayTeam2));
         return sb.toString();
     }
 
-    // Get all team names in the pattern - Keep as is
     public Set<String> getAllTeams() {
         Set<String> teams = new HashSet<>();
-        teams.add(homeTeam1);
-        teams.add(awayTeam1);
-        teams.add(homeTeam2);
-        teams.add(awayTeam2);
+        teams.add(homeTeam1); teams.add(awayTeam1);
+        if (homeTeam2 != null) teams.add(homeTeam2);
+        if (awayTeam2 != null) teams.add(awayTeam2);
         return teams;
     }
 }
 
-// Refactor MatchResult slightly - remove static WebDriver methods
 class MatchResult {
-    String homeTeam;
-    String awayTeam;
-    String score;
-    String previousMatchScore;
-    String previousHTScore;
-    String nextMatchScore;
-    String nextHTScore;
-    String season;
-    String firstMatchHTScore;
-    String secondMatchHomeTeam;
-    String secondMatchScore;
-    String secondMatchAwayTeam;
-    String secondMatchHTScore;
-
-    // Store the original pattern for context and filtering
+    String homeTeam, awayTeam, score;
+    String middleHomeTeam, middleAwayTeam, middleScore, middleHTScore;
+    String previousMatchScore, previousHTScore;
+    String nextMatchScore, nextHTScore;
+    String season, firstMatchHTScore;
+    String secondMatchHomeTeam, secondMatchScore, secondMatchAwayTeam, secondMatchHTScore;
     MatchPattern originalPattern;
 
     public MatchResult(String homeTeam, String awayTeam, String score, String season, MatchPattern originalPattern) {
-        this.homeTeam = homeTeam;
-        this.awayTeam = awayTeam;
-        this.score = score;
-        this.season = season;
-        this.originalPattern = originalPattern; // Store the pattern
+        this.homeTeam = homeTeam; this.awayTeam = awayTeam;
+        this.score = score; this.season = season;
+        this.originalPattern = originalPattern;
     }
 
     @Override
     public String toString() {
-        String prevMatch = previousMatchScore != null ?
-                previousMatchScore + " (HT: " + (previousHTScore != null ? previousHTScore : "N/A") + ")" :
-                "Bilgi Yok";
+        String prev   = previousMatchScore != null ? previousMatchScore + " (HT: " + nvl(previousHTScore) + ")" : "Bilgi Yok";
+        String next   = nextMatchScore != null ? nextMatchScore + " (HT: " + nvl(nextHTScore) + ")" : "Bilgi Yok";
+        String m1     = homeTeam + " " + score + " " + awayTeam + " (HT: " + nvl(firstMatchHTScore) + ")";
+        String mid    = (middleHomeTeam != null && middleScore != null)
+                ? middleHomeTeam + " " + middleScore + " " + middleAwayTeam + " (HT: " + nvl(middleHTScore) + ")"
+                : "Bilgi Yok";
+        String m2     = secondMatchHomeTeam != null
+                ? secondMatchHomeTeam + " " + secondMatchScore + " " + secondMatchAwayTeam + " (HT: " + nvl(secondMatchHTScore) + ")"
+                : "Bilgi Yok";
 
-        String nextMatch = nextMatchScore != null ?
-                nextMatchScore + " (HT: " + (nextHTScore != null ? nextHTScore : "N/A") + ")" :
-                "Bilgi Yok";
-
-        String matchPattern1 = homeTeam + " " + score + " " + awayTeam +
-                               " (HT: " + (firstMatchHTScore != null ? firstMatchHTScore : "N/A") + ")";
-
-        String matchPattern2 = secondMatchHomeTeam != null ?
-                secondMatchHomeTeam + " " + secondMatchScore + " " + secondMatchAwayTeam +
-                " (HT: " + (secondMatchHTScore != null ? secondMatchHTScore : "N/A") + ")" :
-                "Bilgi Yok";
-
-        // Add season info to the output for clarity
-        return String.format("[%s Sezonu]\nönceki maç -> %s\npattern maçları -> %s\n                 %s\nsonraki maç -> %s",
-                season,
-                prevMatch,
-                matchPattern1,
-                matchPattern2,
-                nextMatch);
+        return String.format(
+                "[%s Sezonu]\nonceki mac    -> %s\n1. pat. mac   -> %s\nARA MAC (2/1) -> %s\n2. pat. mac   -> %s\nsonraki mac   -> %s",
+                season, prev, m1, mid, m2, next);
     }
 
-    // Keep the filtering logic - depends on originalPattern being set
-    public boolean containsOriginalTeamVsOpponent() {
-        if (originalPattern == null) return false; // Should not happen if constructor is used correctly
+    private String nvl(String s) { return s != null ? s : "N/A"; }
 
-        // Check if first match has a team playing against the same opponent as in the original pattern
-        if ((homeTeam.equals(originalPattern.homeTeam1) && awayTeam.equals(originalPattern.awayTeam1)) ||
-            (homeTeam.equals(originalPattern.awayTeam1) && awayTeam.equals(originalPattern.homeTeam1)) ||
-            (homeTeam.equals(originalPattern.homeTeam2) && awayTeam.equals(originalPattern.awayTeam2)) ||
-            (homeTeam.equals(originalPattern.awayTeam2) && awayTeam.equals(originalPattern.homeTeam2))) {
-            return true;
-        }
-
-        // Check if second match has a team playing against the same opponent as in the original pattern
-        if (secondMatchHomeTeam != null && // Ensure second match exists
-            ((secondMatchHomeTeam.equals(originalPattern.homeTeam1) && secondMatchAwayTeam.equals(originalPattern.awayTeam1)) ||
-             (secondMatchHomeTeam.equals(originalPattern.awayTeam1) && secondMatchAwayTeam.equals(originalPattern.homeTeam1)) ||
-             (secondMatchHomeTeam.equals(originalPattern.homeTeam2) && secondMatchAwayTeam.equals(originalPattern.awayTeam2)) ||
-             (secondMatchHomeTeam.equals(originalPattern.awayTeam2) && secondMatchAwayTeam.equals(originalPattern.homeTeam2)))) {
-            return true;
-        }
-
-
-        return false;
-    }
+    public boolean containsOriginalTeamVsOpponent() { return true; }
 }

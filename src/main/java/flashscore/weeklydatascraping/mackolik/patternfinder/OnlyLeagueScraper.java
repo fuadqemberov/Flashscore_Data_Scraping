@@ -14,262 +14,211 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class OnlyLeagueScraper {
 
     private static final Logger log = LoggerFactory.getLogger(OnlyLeagueScraper.class);
     private static final String BASE_URL = "https://arsiv.mackolik.com/Team/Default.aspx?id=%d&season=%s";
-    private static final String CURRENT_SEASON = "2025/2026"; // Assuming this is the current season year format
+    private static final String CURRENT_SEASON = "2025/2026";
+    private static final Set<String> COMEBACK_RESULTS = Set.of("2/1", "1/2");
 
-    // Helper method to fetch HTML content
     private static String fetchHtml(CloseableHttpClient httpClient, String url) throws IOException {
         HttpGet request = new HttpGet(url);
-        // Optional: Add headers like User-Agent if needed
-        request.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-
-        log.debug("Fetching URL: {}", url);
+        request.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
         try (CloseableHttpResponse response = httpClient.execute(request)) {
             int statusCode = response.getStatusLine().getStatusCode();
-            if (statusCode == 200) {
-                return EntityUtils.toString(response.getEntity());
-            } else {
-                log.warn("Failed to fetch URL: {}. Status code: {}", url, statusCode);
-                return null; // Or throw exception
-            }
-        } catch (IOException e) {
-            log.error("IOException while fetching URL: {}", url, e);
-            throw e; // Re-throw to indicate failure
+            if (statusCode == 200) return EntityUtils.toString(response.getEntity());
+            return null;
         }
     }
 
-    // --- Refactored findCurrentSeasonLastTwoMatches ---
-    public static MatchPattern findCurrentSeasonLastTwoMatches(CloseableHttpClient httpClient, int teamId) throws IOException, RuntimeException {
-        String currentSeasonUrl = String.format(BASE_URL, teamId, CURRENT_SEASON);
-        String html = fetchHtml(httpClient, currentSeasonUrl);
+    public static MatchPattern findCurrentSeasonLastTwoMatches(CloseableHttpClient httpClient, int teamId)
+            throws IOException {
 
-        if (html == null) {
-            throw new RuntimeException("Could not fetch current season page for team ID: " + teamId);
-        }
+        String html = fetchHtml(httpClient, String.format(BASE_URL, teamId, CURRENT_SEASON));
+        if (html == null) throw new RuntimeException("Sayfa alinamadi: " + teamId);
 
         Document doc = Jsoup.parse(html);
         Element tableBody = doc.selectFirst("#tblFixture > tbody");
+        if (tableBody == null) throw new RuntimeException("Fikstür tablosu bulunamadi: " + teamId);
 
-        if (tableBody == null) {
-            log.warn("Fixture table body not found for team ID {} in season {}", teamId, CURRENT_SEASON);
-            throw new RuntimeException("Fixture table not found for team ID: " + teamId);
-        }
-
-        List<String> allScores = new ArrayList<>();
-        List<String> allHomeTeams = new ArrayList<>();
-        List<String> allAwayTeams = new ArrayList<>();
-        String nextHomeTeam = null;
-        String nextAwayTeam = null;
         String teamName = "Unknown";
-
         try {
-            Element teamNameElement = doc.selectFirst("title");
-            if (teamNameElement != null) {
-                String title = teamNameElement.text();
-                teamName = title.split("-")[0].trim();
-            }
-        } catch (Exception e) {
-            log.warn("Could not extract team name for ID {}", teamId);
+            Element title = doc.selectFirst("title");
+            if (title != null) teamName = title.text().split("-")[0].trim();
+        } catch (Exception ignored) {}
+
+        List<String> scores    = new ArrayList<>();
+        List<String> homeTeams = new ArrayList<>();
+        List<String> awayTeams = new ArrayList<>();
+        List<Boolean> played   = new ArrayList<>();
+
+        for (Element row : tableBody.select("tr")) {
+            if (row.selectFirst("td[itemprop=sportsevent]") != null) break;
+            if (row.hasClass("competition")) continue;
+            Element homeEl = row.selectFirst("td:nth-child(3)");
+            Element awayEl = row.selectFirst("td:nth-child(7)");
+            if (homeEl == null || awayEl == null) continue;
+            Element scoreEl = row.selectFirst("td:nth-child(5) b a");
+            String score = scoreEl != null ? scoreEl.text().trim() : "";
+            homeTeams.add(homeEl.text().trim());
+            awayTeams.add(awayEl.text().trim());
+            scores.add(score);
+            played.add(score.contains("-") && !score.equalsIgnoreCase("v"));
         }
 
-        Elements rows = tableBody.select("tr");
-        boolean foundUnplayed = false;
-
-        for (Element row : rows) {
-            if (row.selectFirst("td[itemprop=sportsevent]") != null) {
-                log.debug("Found 'sportsevent' row, stopping processing for team {}", teamId);
-                break;
-            }
-            if (row.hasClass("competition")) {
-                continue;
-            }
-
-            try {
-                Element scoreElement = row.selectFirst("td:nth-child(5) b a");
-                Element homeTeamElement = row.selectFirst("td:nth-child(3)");
-                Element awayTeamElement = row.selectFirst("td:nth-child(7)");
-
-                if (scoreElement != null && homeTeamElement != null && awayTeamElement != null) {
-                    String score = scoreElement.text().trim();
-                    String homeTeam = homeTeamElement.text().trim();
-                    String awayTeam = awayTeamElement.text().trim();
-
-                    if (!foundUnplayed && !score.isEmpty() && !score.equalsIgnoreCase("v") && score.contains("-")) {
-                        allScores.add(score);
-                        allHomeTeams.add(homeTeam);
-                        allAwayTeams.add(awayTeam);
-                        log.trace("Added match: {} {} {}", homeTeam, score, awayTeam);
-                    } else if (!foundUnplayed) {
-                        nextHomeTeam = homeTeam;
-                        nextAwayTeam = awayTeam;
-                        foundUnplayed = true;
-                        log.debug("Found next unplayed match: {} vs {}", nextHomeTeam, nextAwayTeam);
-                        break;
-                    }
-                } else {
-                    log.trace("Skipping row without expected match data elements: {}", row.html());
-                }
-            } catch (Exception e) {
-                log.warn("Error parsing a match row for team {}: {}. Row HTML: {}", teamId, e.getMessage(), row.html());
-            }
+        int lastIdx = -1;
+        for (int i = scores.size() - 1; i >= 0; i--) {
+            if (played.get(i)) { lastIdx = i; break; }
         }
 
-        if (allScores.size() >= 2) {
-            int lastIndex = allScores.size() - 1;
-            String score1 = allScores.get(lastIndex - 1);
-            String score2 = allScores.get(lastIndex);
-            String home1 = allHomeTeams.get(lastIndex - 1);
-            String away1 = allAwayTeams.get(lastIndex - 1);
-            String home2 = allHomeTeams.get(lastIndex);
-            String away2 = allAwayTeams.get(lastIndex);
+        if (lastIdx < 0)           throw new RuntimeException("Oynanan mac yok: " + teamId);
+        if (lastIdx + 2 >= scores.size()) throw new RuntimeException("Sonraki 2 mac bulunamadi: " + teamId);
 
-            log.info("Found last two matches for team ID {}: {} vs {} ({}), {} vs {} ({})", teamId, home1, away1, score1, home2, away2, score2);
-            return new MatchPattern(score1, score2, home1, away1, home2, away2, teamName, nextHomeTeam, nextAwayTeam);
-        } else {
-            log.warn("Could not find at least two completed match scores for team ID {} in season {}", teamId, CURRENT_SEASON);
-            throw new RuntimeException("Son iki maç skoru bulunamadı for team ID: " + teamId + "! Found: " + allScores.size());
-        }
+        String score1  = scores.get(lastIdx);
+        String home1   = homeTeams.get(lastIdx);
+        String away1   = awayTeams.get(lastIdx);
+        String midHome = homeTeams.get(lastIdx + 1);
+        String midAway = awayTeams.get(lastIdx + 1);
+        String home2   = homeTeams.get(lastIdx + 2);
+        String away2   = awayTeams.get(lastIdx + 2);
+
+        // Mevcut pattern ekrana bas
+        System.out.println("\n╔══════════════════════════════════════════════════════╗");
+        System.out.printf ("║  MEVCUT PATTERN — %-33s║%n", teamName);
+        System.out.println("╠══════════════════════════════════════════════════════╣");
+        System.out.printf ("║  [1] %-20s %5s %-20s ║%n", home1, score1, away1);
+        System.out.printf ("║  [2] %-20s  vs   %-15s(?)║%n", midHome, midAway);
+        System.out.printf ("║  [3] %-20s  vs   %-20s ║%n", home2, away2);
+        System.out.println("╚══════════════════════════════════════════════════════╝\n");
+
+        return new MatchPattern(score1, null, home1, away1, home2, away2, teamName, midHome, midAway);
     }
 
-
-    // --- Refactored findScorePattern ---
-    public static List<MatchResult> findScorePattern(CloseableHttpClient httpClient, MatchPattern pattern, String seasonYear, int teamId) throws IOException {
+    public static List<MatchResult> findScorePattern(CloseableHttpClient httpClient, MatchPattern pattern,
+                                                     String seasonYear, int teamId) throws IOException {
         List<MatchResult> foundResults = new ArrayList<>();
-        String seasonUrl = String.format(BASE_URL, teamId, seasonYear);
-        String html = fetchHtml(httpClient, seasonUrl);
 
-        if (html == null) {
-            log.warn("Could not fetch page for team ID {} and season {}", teamId, seasonYear);
-            return foundResults; // Return empty list if page fetch fails
-        }
+        String html = fetchHtml(httpClient, String.format(BASE_URL, teamId, seasonYear));
+        if (html == null) return foundResults;
 
         Document doc = Jsoup.parse(html);
-        // Select all rows within any tbody inside a table - adjust if structure is more specific
-        Elements allTableRows = doc.select("table tbody tr");
-
         List<Element> leagueMatches = new ArrayList<>();
-        boolean isFirstLeague = true;
-        boolean collectRows = false;
+        boolean isFirstLeague = true, collecting = false;
 
-        for (Element row : allTableRows) {
+        for (Element row : doc.select("table tbody tr")) {
             if (row.hasClass("competition")) {
-                if (!isFirstLeague) {
-                    log.debug("Found second competition header, stopping row collection for season {}", seasonYear);
-                    break; // Stop after the first league's matches
-                }
-                isFirstLeague = false;
-                collectRows = true; // Start collecting rows after the first competition header
-                log.debug("Found first competition header for season {}", seasonYear);
-                continue; // Skip the header row itself
+                if (!isFirstLeague) break;
+                isFirstLeague = false; collecting = true; continue;
             }
-
-            // Collect rows only if they belong to the first league section and have the 'row' class (or similar marker)
-            // Also check for essential elements to avoid adding empty/irrelevant rows
-            if (collectRows && row.selectFirst("td:nth-child(5) b a") != null) {
+            if (collecting && row.selectFirst("td:nth-child(5) b a") != null)
                 leagueMatches.add(row);
-            } else if (collectRows) {
-                log.trace("Skipping row in league section (missing score link or not a match row?): {}", row.html());
-            }
         }
 
-        log.debug("Collected {} potential league match rows for season {}", leagueMatches.size(), seasonYear);
-
-
-        for (int i = 0; i < leagueMatches.size() - 1; i++) {
-            Element currentRow = leagueMatches.get(i);
-            Element nextRow = leagueMatches.get(i + 1);
+        // 3'lu pencere ara
+        for (int i = 0; i < leagueMatches.size() - 2; i++) {
+            Element row1   = leagueMatches.get(i);
+            Element rowMid = leagueMatches.get(i + 1);
+            Element row2   = leagueMatches.get(i + 2);
 
             try {
-                // Extract scores using Jsoup selectors
-                String currentScore = currentRow.selectFirst("td:nth-child(5) b a").text().trim();
-                String nextScore = nextRow.selectFirst("td:nth-child(5) b a").text().trim();
+                String home1 = row1.selectFirst("td:nth-child(3)").text().trim();
+                String away1 = row1.selectFirst("td:nth-child(7)").text().trim();
+                String home2 = row2.selectFirst("td:nth-child(3)").text().trim();
+                String away2 = row2.selectFirst("td:nth-child(7)").text().trim();
 
-                // Check pattern match (both orders)
-                boolean matchOrder1 = currentScore.equals(pattern.score1) && nextScore.equals(pattern.score2);
-                boolean matchOrder2 = currentScore.equals(pattern.score2) && nextScore.equals(pattern.score1);
+                boolean firstOk  = (home1.equals(pattern.homeTeam1) && away1.equals(pattern.awayTeam1)) ||
+                        (home1.equals(pattern.awayTeam1) && away1.equals(pattern.homeTeam1));
+                boolean secondOk = pattern.homeTeam2 != null &&
+                        ((home2.equals(pattern.homeTeam2) && away2.equals(pattern.awayTeam2)) ||
+                                (home2.equals(pattern.awayTeam2) && away2.equals(pattern.homeTeam2)));
 
-                if (matchOrder1 || matchOrder2) {
-                    log.debug("Pattern match found for season {} at index {}", seasonYear, i);
+                if (!firstOk || !secondOk) continue;
 
-                    // Extract details for the two matched rows
-                    String homeTeam = currentRow.selectFirst("td:nth-child(3)").text().trim();
-                    String awayTeam = currentRow.selectFirst("td:nth-child(7)").text().trim();
-                    String currentHTScore = currentRow.selectFirst("td:nth-child(9)").text().trim();
+                String midScore  = rowMid.selectFirst("td:nth-child(5) b a").text().trim();
+                String midResult = extractComebackResult(rowMid);
 
-                    String secondMatchHomeTeam = nextRow.selectFirst("td:nth-child(3)").text().trim();
-                    String secondMatchAwayTeam = nextRow.selectFirst("td:nth-child(7)").text().trim();
-                    String secondMatchScore = nextScore; // Already have this
-                    String secondMatchHTScore = nextRow.selectFirst("td:nth-child(9)").text().trim();
+                if (!COMEBACK_RESULTS.contains(midResult)) continue;
 
-                    // Create MatchResult object, passing the original pattern
-                    MatchResult result = new MatchResult(homeTeam, awayTeam, currentScore, seasonYear, pattern);
-                    result.firstMatchHTScore = currentHTScore.isEmpty() ? null : currentHTScore;
-                    result.secondMatchHomeTeam = secondMatchHomeTeam;
-                    result.secondMatchScore = secondMatchScore;
-                    result.secondMatchAwayTeam = secondMatchAwayTeam;
-                    result.secondMatchHTScore = secondMatchHTScore.isEmpty() ? null : secondMatchHTScore;
+                // ESLESME BULUNDU — sadece bu 3 maci yazdir
+                String score1  = row1.selectFirst("td:nth-child(5) b a").text().trim();
+                String ht1     = nullIfEmpty(row1.selectFirst("td:nth-child(9)").text().trim());
+                String midHome = rowMid.selectFirst("td:nth-child(3)").text().trim();
+                String midAway = rowMid.selectFirst("td:nth-child(7)").text().trim();
+                String midHT   = nullIfEmpty(rowMid.selectFirst("td:nth-child(9)").text().trim());
+                String score2  = row2.selectFirst("td:nth-child(5) b a").text().trim();
+                String ht2     = nullIfEmpty(row2.selectFirst("td:nth-child(9)").text().trim());
 
+                System.out.println("  ┌─ ESLESTI! " + pattern.teamName + " — " + seasonYear + " ─────────────────────┐");
+                System.out.printf ("  │ [1] %-20s %5s %-20s (HT: %s)│%n", home1, score1, away1, nvl(ht1));
+                System.out.printf ("  │ [2] %-20s %5s %-20s (HT: %s) *** %s ***│%n", midHome, midScore, midAway, nvl(midHT), midResult);
+                System.out.printf ("  │ [3] %-20s %5s %-20s (HT: %s)│%n", home2, score2, away2, nvl(ht2));
+                System.out.println("  └─────────────────────────────────────────────────────────┘");
 
-                    // Extract preceding match details (if exists)
-                    if (i > 0) {
-                        Element precedingRow = leagueMatches.get(i - 1);
-                        try {
-                            String precedingScore = precedingRow.selectFirst("td:nth-child(5) b a").text().trim();
-                            String precedingHTScore = precedingRow.selectFirst("td:nth-child(9)").text().trim();
-                            String precedingHome = precedingRow.selectFirst("td:nth-child(3)").text().trim();
-                            String precedingAway = precedingRow.selectFirst("td:nth-child(7)").text().trim();
-                            result.previousMatchScore = precedingHome + " " + precedingScore + " " + precedingAway;
-                            result.previousHTScore = precedingHTScore.isEmpty() ? null : precedingHTScore;
-                        } catch (Exception e) {
-                            log.warn("Could not parse preceding match at index {} for season {}", i - 1, seasonYear, e);
-                            result.previousMatchScore = "Hata (Önceki)";
-                        }
+                MatchResult result = new MatchResult(home1, away1, score1, seasonYear, pattern);
+                result.firstMatchHTScore   = ht1;
+                result.middleHomeTeam      = midHome;
+                result.middleAwayTeam      = midAway;
+                result.middleScore         = midScore + " (" + midResult + ")";
+                result.middleHTScore       = midHT;
+                result.secondMatchHomeTeam = home2;
+                result.secondMatchScore    = score2;
+                result.secondMatchAwayTeam = away2;
+                result.secondMatchHTScore  = ht2;
 
-                    } else {
-                        result.previousMatchScore = "Bilgi Yok (İlk Maç)";
-                        result.previousHTScore = null;
-                    }
-
-                    // Extract following match details (if exists)
-                    if (i + 2 < leagueMatches.size()) {
-                        Element followingRow = leagueMatches.get(i + 2);
-                        try {
-                            String followingScore = followingRow.selectFirst("td:nth-child(5) b a").text().trim();
-                            String followingHTScore = followingRow.selectFirst("td:nth-child(9)").text().trim();
-                            String followingHome = followingRow.selectFirst("td:nth-child(3)").text().trim();
-                            String followingAway = followingRow.selectFirst("td:nth-child(7)").text().trim();
-                            result.nextMatchScore = followingHome + " " + followingScore + " " + followingAway;
-                            result.nextHTScore = followingHTScore.isEmpty() ? null : followingHTScore;
-                        } catch(Exception e) {
-                            log.warn("Could not parse following match at index {} for season {}", i + 2, seasonYear, e);
-                            result.nextMatchScore = "Hata (Sonraki)";
-                        }
-                    } else {
-                        result.nextMatchScore = "Bilgi Yok (Son Maç)";
-                        result.nextHTScore = null;
-                    }
-
-                    // Apply the filter: Only add if it involves original teams playing same opponent
-                    if (result.containsOriginalTeamVsOpponent()) {
-                        foundResults.add(result);
-                        log.info("Filtered pattern match added for team {}, season {}", teamId, seasonYear);
-                    } else {
-                        log.debug("Pattern match found but filtered out (opponent mismatch) for team {}, season {}", teamId, seasonYear);
-                    }
+                if (i > 0) {
+                    Element prev = leagueMatches.get(i - 1);
+                    String ps = prev.selectFirst("td:nth-child(5) b a").text().trim();
+                    String ph = prev.selectFirst("td:nth-child(3)").text().trim();
+                    String pa = prev.selectFirst("td:nth-child(7)").text().trim();
+                    result.previousMatchScore = ph + " " + ps + " " + pa;
+                    result.previousHTScore    = nullIfEmpty(prev.selectFirst("td:nth-child(9)").text().trim());
+                } else {
+                    result.previousMatchScore = "Bilgi Yok (Ilk Mac)";
                 }
+
+                if (i + 3 < leagueMatches.size()) {
+                    Element next = leagueMatches.get(i + 3);
+                    String ns = next.selectFirst("td:nth-child(5) b a").text().trim();
+                    String nh = next.selectFirst("td:nth-child(3)").text().trim();
+                    String na = next.selectFirst("td:nth-child(7)").text().trim();
+                    result.nextMatchScore = nh + " " + ns + " " + na;
+                    result.nextHTScore    = nullIfEmpty(next.selectFirst("td:nth-child(9)").text().trim());
+                } else {
+                    result.nextMatchScore = "Bilgi Yok (Son Mac)";
+                }
+
+                foundResults.add(result);
+
             } catch (Exception e) {
-                // Log error for this pair of rows but continue checking others
-                log.error("Error analyzing match pair at index {} for team {}, season {}: {}", i, teamId, seasonYear, e.getMessage());
-                // Consider adding more details like row HTML if helpful for debugging
-                // log.error("Row 1 HTML: {}", currentRow.html());
-                // log.error("Row 2 HTML: {}", nextRow.html());
+                log.error("Pencere hatasi idx:{} sezon:{}: {}", i, seasonYear, e.getMessage());
             }
         }
 
         return foundResults;
     }
+
+    private static String extractComebackResult(Element row) {
+        try {
+            for (Element td : row.select("td")) {
+                String text = td.text().trim();
+                if (text.equals("2/1") || text.equals("1/2")) return text;
+                Element img = td.selectFirst("img[alt]");
+                if (img != null) {
+                    String alt = img.attr("alt").trim();
+                    if (alt.equals("2/1") || alt.equals("1/2")) return alt;
+                }
+                Element inner = td.selectFirst("span, div, b");
+                if (inner != null) {
+                    String t = inner.text().trim();
+                    if (t.equals("2/1") || t.equals("1/2")) return t;
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private static String nullIfEmpty(String s) { return (s == null || s.isEmpty()) ? null : s; }
+    private static String nvl(String s) { return s != null ? s : "N/A"; }
 }

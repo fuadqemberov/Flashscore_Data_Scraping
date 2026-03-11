@@ -22,7 +22,7 @@ public class MultiTeamSeasonAnalyzerFinal {
 
     private static final String INPUT_FILE_NAME = "takim_idleri.txt";
     private static final String OUTPUT_DIRECTORY_NAME = "excel";
-    private static final int START_YEAR = 2020;
+    private static final int START_YEAR = 20151;
     private static final int END_YEAR = 2025;
 
     public static void main(String[] args) {
