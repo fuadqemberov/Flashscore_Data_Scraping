@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.patternfinder.triplepattern;
+package flashscore.weeklydatascraping.mackolik.triplepattern;
 
 // Model for three consecutive match pattern
 class ThreeMatchPattern {

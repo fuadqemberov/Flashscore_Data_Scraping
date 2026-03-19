@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.patternfinder.newgen;
+package flashscore.weeklydatascraping.mackolik.newgen;
 
 
 import org.apache.http.client.methods.CloseableHttpResponse;

@@ -22,7 +22,7 @@ public class HttpVirtualThreadedPatternAnalyzer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpVirtualThreadedPatternAnalyzer.class);
     private static final int START_YEAR = 2024;
-    private static final int END_YEAR = 2017;
+    private static final int END_YEAR = 2014;
 
     private static class TeamProcessorTask implements Callable<String> {
         private final int teamId;

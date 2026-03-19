@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.patternfinder.triplepattern;
+package flashscore.weeklydatascraping.mackolik.triplepattern;
 
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;

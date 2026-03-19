@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.patternfinder.triplepattern;
+package flashscore.weeklydatascraping.mackolik.triplepattern;
 
 import flashscore.weeklydatascraping.mackolik.patternfinder.TeamIdFinder;
 import org.apache.http.impl.client.CloseableHttpClient;
