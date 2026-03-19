@@ -7,36 +7,149 @@ import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.*;
+
 public class MackolikHalfTimePatternFinder {
-    public static Set<String> upcomingMatchIds = new LinkedHashSet<>();
-    public static List<String> matchedPatterns = new ArrayList<>();
-    public static void main(String[] args) {
+    // Thread-safe koleksiyonlar
+    public static Set<String> upcomingMatchIds = Collections.synchronizedSet(new LinkedHashSet<>());
+    public static List<String> matchedPatterns = Collections.synchronizedList(new ArrayList<>());
+    
+    // Virtual Thread Executor ve Driver Pool
+    private static final int DRIVER_POOL_SIZE = 8; // Paralel işlem sayısı
+    private static final BlockingQueue<WebDriver> driverPool = new LinkedBlockingQueue<>(DRIVER_POOL_SIZE);
+    private static volatile boolean shutdownRequested = false;
+
+    static {
+        // Driver pool'unu başlat
+        initializeDriverPool();
+    }
+
+    /**
+     * WebDriver pool'unu başlatır - her thread için ayrı driver instance
+     */
+    private static void initializeDriverPool() {
         WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless");
         options.addArguments("--disable-gpu");
         options.addArguments("--window-size=1920,1080");
-        WebDriver driver = new ChromeDriver(options);
+        options.addArguments("--no-sandbox");
+        options.addArguments("--disable-dev-shm-usage");
+
+        for (int i = 0; i < DRIVER_POOL_SIZE; i++) {
+            try {
+                WebDriver driver = new ChromeDriver(options);
+                driver.manage().window().maximize();
+                if (!driverPool.offer(driver)) {
+                    System.err.println("❌ Driver pool dolu, driver kapatılıyor: " + (i + 1));
+                    driver.quit();
+                } else {
+                    System.out.println("✓ Driver #" + (i + 1) + " pool'a eklendi");
+                }
+            } catch (Exception e) {
+                System.err.println("❌ Driver oluşturulurken hata (ID: " + i + "): " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Pool'dan driver al - thread-safe
+     */
+    private static WebDriver acquireDriver() throws InterruptedException {
+        if (shutdownRequested) {
+            throw new IllegalStateException("Driver pool kapatılmıştır");
+        }
+        return driverPool.take();
+    }
+
+    /**
+     * Driver'ı pool'a geri döndür
+     */
+    private static void releaseDriver(WebDriver driver) {
+        if (driver != null && !shutdownRequested) {
+            try {
+                driverPool.put(driver);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /**
+     * Pool'u kapatır - tüm driver'ları temizle
+     */
+    private static void shutdownDriverPool() {
+        shutdownRequested = true;
+        WebDriver driver;
+        while ((driver = driverPool.poll()) != null) {
+            try {
+                driver.quit();
+                System.out.println("✓ Driver kapatıldı");
+            } catch (Exception e) {
+                System.err.println("⚠️ Driver kapatılırken hata: " + e.getMessage());
+            }
+        }
+        System.out.println("✓ Tüm driver'lar pool'dan temizlendi");
+    }
+
+    public static void main(String[] args) {
+        long startTime = System.currentTimeMillis();
+        System.out.println("🚀 Sistem başlatıldı (Virtual Threads desteği aktif)");
+        System.out.println("📊 Paralel işlem sayısı: " + DRIVER_POOL_SIZE + "\n");
+
+        WebDriver mainDriver = null;
+        ExecutorService virtualExecutor = null;
+
         try {
-            driver.manage().window().maximize();
-            getDailyUpcomingMatchIds(driver);
+            // Ana driver ile maç ID'lerini topla
+            mainDriver = acquireDriver();
+            System.out.println("📍 Maç ID'leri toplanıyor...\n");
+            getDailyUpcomingMatchIds(mainDriver);
+            releaseDriver(mainDriver);
+            mainDriver = null;
+
             System.out.println("\n================================");
-            System.out.println("Toplanan Maç ID Sayısı: " + upcomingMatchIds.size());
+            System.out.println("📋 Toplanan Maç ID Sayısı: " + upcomingMatchIds.size());
             System.out.println("================================\n");
-            System.out.println("==== SİSTEM ANALİZİ BAŞLIYOR ====\n");
+
+            if (upcomingMatchIds.isEmpty()) {
+                System.out.println("❌ Hiç maç bulunamadı!");
+                return;
+            }
+
+            System.out.println("⚙️  SİSTEM ANALİZİ BAŞLIYOR (VIRTUAL THREADS İLE PARALEL)...\n");
+
+            // Virtual Thread Executor oluştur
+            virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
+
+            // Her maç analizi için ayrı task oluştur
+            List<Future<?>> futures = new ArrayList<>();
             for (String matchId : upcomingMatchIds) {
+                Future<?> future = virtualExecutor.submit(() -> analyzeMatchFormWithDriver(matchId));
+                futures.add(future);
+            }
+
+            // Tüm task'ları tamamlanana kadar bekle
+            System.out.println("⏳ Tüm maç analizleri tamamlanıyor...");
+            int completedCount = 0;
+            for (Future<?> future : futures) {
                 try {
-                    analyzeMatchForm(driver, matchId);
-                } catch (TimeoutException te) {
-                    System.out.println("⚠️ Maç ID " + matchId + " timeout. Devam ediliyor...");
+                    future.get(120, TimeUnit.SECONDS);
+                    completedCount++;
+                    printProgress(completedCount, upcomingMatchIds.size());
+                } catch (java.util.concurrent.TimeoutException te) {
+                    future.cancel(true);
+                    System.out.println("⚠️ Task timeout. Devam ediliyor...");
                 } catch (Exception e) {
-                    System.out.println("⚠️ Maç ID " + matchId + " analiz edilirken hata: " + e.getClass().getSimpleName() + ". Devam ediliyor...");
+                    System.out.println("⚠️ Task hatasında devam ediliyor...");
                 }
             }
-            System.out.println("\n==== BÜTÜN MAÇLARIN ANALİZİ TAMAMLANDI ====");
+
+            System.out.println("\n\n==== BÜTÜN MAÇLARIN ANALİZİ TAMAMLANDI ====");
             System.out.println("\n=======================================================");
             System.out.println("🔥 SONUÇ: SİSTEM TAKTİKLERİNE UYAN MAÇLAR 🔥");
             System.out.println("=======================================================");
+
             if (matchedPatterns.isEmpty()) {
                 System.out.println("❌ Maalesef bugün için patternlere uyan maç bulunamadı.");
             } else {
@@ -47,23 +160,88 @@ public class MackolikHalfTimePatternFinder {
                 System.out.println("\n✅ Toplam Bulunan Sinyal Sayısı: " + matchedPatterns.size());
             }
             System.out.println("=======================================================\n");
-        } catch (TimeoutException te) {
-            System.err.println("❌ Ana işlemde timeout hatası oluştu: " + te.getMessage());
-            te.printStackTrace();
+
+        } catch (InterruptedException ie) {
+            System.err.println("❌ Ana işlem kesintiye uğradı: " + ie.getMessage());
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
             System.err.println("❌ Ana işlemde hata oluştu: " + e.getMessage());
-            e.printStackTrace();
         } finally {
-            try {
-                if (driver != null) {
-                    driver.quit();
-                    System.out.println("Tarayıcı kapatıldı.");
+            // Executor'ü graceful shutdown yap
+            if (virtualExecutor != null && !virtualExecutor.isShutdown()) {
+                virtualExecutor.shutdown();
+                try {
+                    if (!virtualExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                        System.out.println("⚠️ Executor timeout, force shutdown yapılıyor...");
+                        virtualExecutor.shutdownNow();
+                    }
+                } catch (InterruptedException e) {
+                    virtualExecutor.shutdownNow();
+                    Thread.currentThread().interrupt();
                 }
-            } catch (Exception e) {
-                System.err.println("Tarayıcı kapatılırken hata: " + e.getMessage());
+            }
+
+            // Driver pool'unu temizle
+            shutdownDriverPool();
+
+            // Şu ana kadar yayınlanan driver'ı da kapatabilir
+            if (mainDriver != null) {
+                try {
+                    mainDriver.quit();
+                } catch (Exception e) {
+                    // ignore
+                }
+            }
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            System.out.println("\n⏱️  Toplam çalışma süresi: " + formatDuration(elapsed));
+            System.out.println("✓ Sistem başarılı şekilde kapatıldı.\n");
+        }
+    }
+
+    /**
+     * Süreyi insan okunabilir formata çevir
+     */
+    private static String formatDuration(long millis) {
+        long seconds = millis / 1000;
+        long minutes = seconds / 60;
+        long secs = seconds % 60;
+        if (minutes > 0) {
+            return String.format("%d dakika %d saniye", minutes, secs);
+        }
+        return String.format("%d saniye", secs);
+    }
+
+    /**
+     * İlerleme durumunu göster
+     */
+    private static void printProgress(int completed, int total) {
+        int percentage = (int) ((completed * 100.0) / total);
+        System.out.print("\r  ✓ İlerleme: " + completed + "/" + total + " (" + percentage + "%)");
+    }
+
+    /**
+     * Virtual Thread için maç analizi - driver pool'dan driver al
+     */
+    private static void analyzeMatchFormWithDriver(String matchId) {
+        WebDriver driver = null;
+        try {
+            driver = acquireDriver();
+            analyzeMatchForm(driver, matchId);
+        } catch (InterruptedException ie) {
+            System.out.println("⚠️ Maç " + matchId + " - Thread kesintiye uğradı");
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            System.out.println("⚠️ Maç " + matchId + " - Hata: " + e.getClass().getSimpleName());
+        } finally {
+            if (driver != null) {
+                releaseDriver(driver);
             }
         }
     }
+
+    //...existing code...
+
     private static void getDailyUpcomingMatchIds(WebDriver driver) {
         try {
             driver.get("https://arsiv.mackolik.com/Canli-Sonuclar");
@@ -78,11 +256,11 @@ public class MackolikHalfTimePatternFinder {
                 try {
                     wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("//div[contains(@class,'cookie-consent-rectangle-wrapper')]")));
                     System.out.println("Çerez bandı kayboldu.");
-                } catch (TimeoutException te) {
+                } catch (org.openqa.selenium.TimeoutException te) {
                     System.out.println("Çerez bandı kaybolması için bekleme zaman aşımı. Devam ediliyor...");
                 }
                 Thread.sleep(500);
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.out.println("Çerez butonu timeout. Devam ediliyor...");
             } catch (Exception e) {
                 System.out.println("Çerez kabul butonu ile ilgili işlem yapılamadı veya zaten yoktu.");
@@ -104,7 +282,7 @@ public class MackolikHalfTimePatternFinder {
                 Thread.sleep(1000);
                 System.out.println("Sol ok elementine tıklandı");
                 System.out.println("Date picker işlemleri tamamlandı.");
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.err.println("Date picker timeout. Devam ediliyor...");
             } catch (Exception e) {
                 System.err.println("Date picker işlemleri sırasında hata: " + e.getMessage() + ". Devam ediliyor...");
@@ -118,7 +296,7 @@ public class MackolikHalfTimePatternFinder {
                         By.xpath("//span[@class='date-right-coll' and @onclick='gotoDate(+1);']")));
                 System.out.println("Sağdaki tarih navigasyonuna tıklanıyor...");
                 rightDateNav.click();
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.out.println("Sağ tarih navigasyonu timeout. Alternatif yöntemler deneniyor...");
                 try {
                     WebElement rightDateNav = driver.findElement(By.xpath("//span[@class='date-right-coll' and @onclick='gotoDate(+1);']"));
@@ -145,7 +323,7 @@ public class MackolikHalfTimePatternFinder {
                 System.out.println("Soldaki tarih navigasyonuna tıklanıyor...");
                 leftDateNav.click();
                 Thread.sleep(1000);
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.out.println("Soldaki tarih navigasyonu timeout. Devam ediliyor...");
             } catch (Exception e) {
                 System.out.println("Soldaki tarih navigasyonunda hata: " + e.getMessage() + ". Devam ediliyor...");
@@ -160,7 +338,7 @@ public class MackolikHalfTimePatternFinder {
                     js.executeScript("arguments[0].click();", futbolCheckbox);
                     try {
                         wait.until(ExpectedConditions.attributeContains(futbolCheckbox, "class", "selected"));
-                    } catch (TimeoutException te) {
+                    } catch (org.openqa.selenium.TimeoutException te) {
                         System.out.println("Futbol seçimi confirm timeout. Devam ediliyor...");
                     }
                     System.out.println("Futbol sekmesi seçildi.");
@@ -168,7 +346,7 @@ public class MackolikHalfTimePatternFinder {
                 } else {
                     System.out.println("Futbol sekmesi zaten seçili.");
                 }
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.err.println("Futbol sekmesi timeout. Devam ediliyor...");
             } catch (Exception e) {
                 System.err.println("Futbol sekmesi hatası: " + e.getMessage() + ". Devam ediliyor...");
@@ -183,7 +361,7 @@ public class MackolikHalfTimePatternFinder {
                     js.executeScript("arguments[0].click();", basketbolCheckbox);
                     try {
                         wait.until(ExpectedConditions.not(ExpectedConditions.attributeContains(basketbolCheckbox, "class", "selected")));
-                    } catch (TimeoutException te) {
+                    } catch (org.openqa.selenium.TimeoutException te) {
                         System.out.println("Basketbol seçimi kaldırma confirm timeout. Devam ediliyor...");
                     }
                     System.out.println("Basketbol sekmesinin seçimi kaldırıldı.");
@@ -191,7 +369,7 @@ public class MackolikHalfTimePatternFinder {
                 } else {
                     System.out.println("Basketbol sekmesi zaten seçili değil.");
                 }
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.err.println("Basketbol sekmesi timeout. Devam ediliyor...");
             } catch (Exception e) {
                 System.err.println("Basketbol sekmesi hatası: " + e.getMessage() + ". Devam ediliyor...");
@@ -206,7 +384,7 @@ public class MackolikHalfTimePatternFinder {
                     js.executeScript("arguments[0].click();", iddaaCheckbox);
                     try {
                         wait.until(ExpectedConditions.attributeContains(iddaaCheckbox, "class", "selected"));
-                    } catch (TimeoutException te) {
+                    } catch (org.openqa.selenium.TimeoutException te) {
                         System.out.println("İDDAA seçimi confirm timeout. Devam ediliyor...");
                     }
                     System.out.println("İDDAA checkbox'ı seçildi.");
@@ -214,7 +392,7 @@ public class MackolikHalfTimePatternFinder {
                 } else {
                     System.out.println("İDDAA checkbox'ı zaten seçili.");
                 }
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.err.println("İDDAA checkbox timeout. Devam ediliyor...");
             } catch (Exception e) {
                 System.err.println("İDDAA checkbox hatası: " + e.getMessage() + ". Devam ediliyor...");
@@ -229,7 +407,7 @@ public class MackolikHalfTimePatternFinder {
                     js.executeScript("arguments[0].click();", tariheGoreButton);
                     try {
                         wait.until(ExpectedConditions.attributeContains(tariheGoreButton, "class", "selected"));
-                    } catch (TimeoutException te) {
+                    } catch (org.openqa.selenium.TimeoutException te) {
                         System.out.println("Tarihe Göre seçimi confirm timeout. Devam ediliyor...");
                     }
                     System.out.println("'Tarihe Göre' butonuna tıklandı ve seçildi.");
@@ -240,10 +418,10 @@ public class MackolikHalfTimePatternFinder {
                 try {
                     wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//div[@id='dvScores']//tr[@sport='1']")));
                     System.out.println("'Tarihe Göre' filtresi aktif ve futbol içeriği mevcut.");
-                } catch (TimeoutException te) {
+                } catch (org.openqa.selenium.TimeoutException te) {
                     System.out.println("Futbol içeriği yükleme timeout. Devam ediliyor...");
                 }
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.err.println("'Tarihe Göre' butonu timeout. Devam ediliyor...");
             } catch (Exception e) {
                 System.err.println("'Tarihe Göre' butonu hatası: " + e.getMessage() + ". Devam ediliyor...");
@@ -273,19 +451,20 @@ public class MackolikHalfTimePatternFinder {
                 System.err.println("Maç linklerini bulurken hata: " + e.getMessage() + ". Devam ediliyor...");
             }
 
-        } catch (TimeoutException te) {
-            System.err.println("getDailyUpcomingMatchIds metodunda timeout hatası: " + te.getMessage() + ". Devam ediliyor...");
+        } catch (org.openqa.selenium.TimeoutException te) {
+            System.err.println("getDailyUpcomingMatchIds metodunda timeout hatası. Devam ediliyor...");
         } catch (Exception e) {
             System.err.println("getDailyUpcomingMatchIds metodunda hata: " + e.getMessage() + ". Devam ediliyor...");
         }
     }
+    
     private static void analyzeMatchForm(WebDriver driver, String matchId) {
         String url = "https://arsiv.mackolik.com/Mac/" + matchId + "/#karsilastirma";
         
         // URL'ye gitme işlemini try-catch ile koru
         try {
             driver.get(url);
-        } catch (TimeoutException te) {
+        } catch (org.openqa.selenium.TimeoutException te) {
             System.out.println("⚠️ Maç ID " + matchId + " - Sayfa yüklenirken timeout (URL erişimi başarısız). Atlanıyor...");
             return;
         } catch (Exception e) {
@@ -300,7 +479,7 @@ public class MackolikHalfTimePatternFinder {
             
             try {
                 wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(formDivXPath)));
-            } catch (TimeoutException te) {
+            } catch (org.openqa.selenium.TimeoutException te) {
                 System.out.println("⚠️ Maç ID " + matchId + " - Form Durumu tablosu yüklenemedi. Atlanıyor...");
                 return;
             }
@@ -357,7 +536,7 @@ public class MackolikHalfTimePatternFinder {
             } else {
                 System.out.println("⚠️ Maç ID " + matchId + " - Tablolar okunamadı.");
             }
-        } catch (TimeoutException te) {
+        } catch (org.openqa.selenium.TimeoutException te) {
             System.out.println("⚠️ Maç ID " + matchId + " - Zaman aşımı hatası. Sayfada beklenmeyen bir gecikme. Atlanıyor...");
         } catch (InterruptedException ie) {
             System.out.println("⚠️ Maç ID " + matchId + " - İş parçacığı kesintiye uğradı. Atlanıyor...");
