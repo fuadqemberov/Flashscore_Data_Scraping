@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.newgen;
+package flashscore.weeklydatascraping.mackolik.multiversion;
 
 import flashscore.weeklydatascraping.mackolik.patternfinder.TeamIdFinder;
 import org.apache.http.client.config.RequestConfig;

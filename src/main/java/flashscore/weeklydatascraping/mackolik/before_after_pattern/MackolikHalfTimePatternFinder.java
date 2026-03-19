@@ -1,4 +1,4 @@
-package flashscore.weeklydatascraping.mackolik.newpattern;
+package flashscore.weeklydatascraping.mackolik.before_after_pattern;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
