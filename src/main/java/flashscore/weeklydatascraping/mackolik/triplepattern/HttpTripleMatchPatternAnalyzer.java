@@ -16,7 +16,7 @@ public class HttpTripleMatchPatternAnalyzer {
 
     private static final Logger log = LoggerFactory.getLogger(HttpTripleMatchPatternAnalyzer.class);
     private static final int START_YEAR = 2024;
-    private static final int END_YEAR = 2017;
+    private static final int END_YEAR = 2014;
     private static final int NUM_THREADS = 10;
 
     private static class TeamTriplePatternTask implements Callable<String> {
