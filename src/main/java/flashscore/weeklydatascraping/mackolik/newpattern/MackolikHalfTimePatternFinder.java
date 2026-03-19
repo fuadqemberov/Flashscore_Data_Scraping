@@ -289,44 +289,46 @@ public class MackolikHalfTimePatternFinder {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             }
 
-            // 3. Sağdaki tarih navigasyonuna tıkla (fallback yöntemleriyle)
+            // 3. Sağdaki tarih navigasyonuna tıkla (reklam iframe engeli aşılarak)
             try {
-                WebDriverWait wait2 = new WebDriverWait(driver, Duration.ofSeconds(10));
-                WebElement rightDateNav = wait2.until(ExpectedConditions.elementToBeClickable(
-                        By.xpath("//span[@class='date-right-coll' and @onclick='gotoDate(+1);']")));
-                System.out.println("Sağdaki tarih navigasyonuna tıklanıyor...");
-                rightDateNav.click();
-            } catch (org.openqa.selenium.TimeoutException te) {
-                System.out.println("Sağ tarih navigasyonu timeout. Alternatif yöntemler deneniyor...");
-                try {
-                    WebElement rightDateNav = driver.findElement(By.xpath("//span[@class='date-right-coll' and @onclick='gotoDate(+1);']"));
-                    js.executeScript("arguments[0].click();", rightDateNav);
-                    System.out.println("JavaScript tıklaması başarılı");
-                } catch (Exception e2) {
-                    System.out.println("JavaScript tıklaması başarısız, doğrudan fonksiyon çağrılıyor...");
-                    try {
-                        js.executeScript("gotoDate(+1);");
-                        System.out.println("Doğrudan fonksiyon çağrısı yürütüldü");
-                    } catch (Exception e3) {
-                        System.out.println("Doğrudan fonksiyon çağrısı da başarısız. Devam ediliyor...");
-                    }
-                }
+                // Önce reklam iframe'lerini DOM'dan kaldır
+                js.executeScript(
+                        "document.querySelectorAll('iframe[id*=\"google_ads\"], " +
+                        "iframe[src*=\"safeframe\"], iframe[src*=\"googlesyndication\"]')" +
+                        ".forEach(el => el.remove());"
+                );
+                Thread.sleep(300);
+                System.out.println("Reklam iframe'leri kaldırıldı.");
+
+                // Doğrudan JS fonksiyonu çağır (en güvenilir yöntem)
+                js.executeScript("gotoDate(+1);");
+                System.out.println("gotoDate(+1) çağrıldı.");
+                Thread.sleep(1500);
+
             } catch (Exception e) {
                 System.out.println("Sağ tarih navigasyonunda hata: " + e.getMessage() + ". Devam ediliyor...");
+                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             }
 
             Thread.sleep(2000);
 
+
             // 4. Soldaki tarih navigasyonuna tıkla
             try {
-                WebElement leftDateNav = driver.findElement(By.cssSelector("span.date-left-coll[onclick='gotoDate(-1);']"));
-                System.out.println("Soldaki tarih navigasyonuna tıklanıyor...");
-                leftDateNav.click();
+                js.executeScript(
+                        "document.querySelectorAll('iframe[id*=\"google_ads\"], " +
+                        "iframe[src*=\"safeframe\"], iframe[src*=\"googlesyndication\"]')" +
+                        ".forEach(el => el.remove());"
+                );
+                Thread.sleep(300);
+
+                js.executeScript("gotoDate(-1);");
+                System.out.println("gotoDate(-1) çağrıldı.");
                 Thread.sleep(1000);
-            } catch (org.openqa.selenium.TimeoutException te) {
-                System.out.println("Soldaki tarih navigasyonu timeout. Devam ediliyor...");
+
             } catch (Exception e) {
                 System.out.println("Soldaki tarih navigasyonunda hata: " + e.getMessage() + ". Devam ediliyor...");
+                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             }
 
             // 5. Futbol sekmesinin seçili olduğundan emin ol
