@@ -40,7 +40,6 @@ public class NowGoalFinalAnalyze {
         options.addArguments("--headless", "--disable-notifications");
         WebDriver driver = new ChromeDriver(options);
         List<String> ids = new ArrayList<>();
-        ids.add("8");
         try {
             driver.get(baseHost);
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
@@ -49,10 +48,10 @@ public class NowGoalFinalAnalyze {
             Thread.sleep(3000);
 
             List<WebElement> ligler = driver.findElements(By.cssSelector(".Leaguestitle.fbHead"));
-//            for (WebElement lig : ligler) {
-//                String id = lig.getAttribute("sclassid");
-//                if (id != null && !id.isEmpty()) ids.add(id);
-//            }
+            for (WebElement lig : ligler) {
+                String id = lig.getAttribute("sclassid");
+                if (id != null && !id.isEmpty()) ids.add(id);
+            }
         } catch (Exception e) { e.printStackTrace(); }
         finally { driver.quit(); }
         return ids;
