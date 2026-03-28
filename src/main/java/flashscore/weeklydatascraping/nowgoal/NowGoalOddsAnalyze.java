@@ -20,7 +20,7 @@ public class NowGoalOddsAnalyze {
 
     static String baseHost = "https://live5.nowgoal26.com/";
     static int geriyeGidilecekSezonSayisi = 5;
-    static final Semaphore BROWSER_SEMAPHORE = new Semaphore(5); // Eyni anda 5 brauzer
+    static final Semaphore BROWSER_SEMAPHORE = new Semaphore(5);
 
     public static void main(String[] args) {
         // Logları söndürmək
@@ -218,16 +218,31 @@ public class NowGoalOddsAnalyze {
         try {
             driver.get(baseHost);
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+
+            // Hot butonuna tıkla
             WebElement hotFilter = wait.until(ExpectedConditions.elementToBeClickable(By.id("li_FilterHot")));
             ((JavascriptExecutor) driver).executeScript("arguments[0].click();", hotFilter);
             Thread.sleep(3000);
+
+            // Tüm lig satırlarını al
             List<WebElement> ligler = driver.findElements(By.cssSelector(".Leaguestitle.fbHead"));
+            System.out.println("Toplam lig (DOM'da): " + ligler.size());
+
             for (WebElement lig : ligler) {
+                boolean displayed = lig.isDisplayed();
                 String id = lig.getAttribute("sclassid");
-                if (id != null && !id.isEmpty()) ids.add(id);
+                if (displayed && id != null && !id.isEmpty()) {
+                    ids.add(id);
+                }
             }
-        } catch (Exception e) { e.printStackTrace(); }
-        finally { driver.quit(); }
+
+            System.out.println("Görünür (Hot) lig sayısı: " + ids.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            driver.quit();
+        }
         return ids;
     }
 

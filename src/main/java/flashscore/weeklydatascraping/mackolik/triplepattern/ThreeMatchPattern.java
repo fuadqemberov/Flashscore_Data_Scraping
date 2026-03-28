@@ -1,6 +1,6 @@
 package flashscore.weeklydatascraping.mackolik.triplepattern;
 
-// Model for three consecutive match pattern
+
 class ThreeMatchPattern {
     public String score1;
     public String score2;
@@ -48,7 +48,6 @@ class ThreeMatchPattern {
     }
 }
 
-// Result model for found triple match patterns
 class TripleMatchResult {
     String homeTeam1;
     String awayTeam1;
