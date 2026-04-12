@@ -20,19 +20,15 @@ public class FlashScoreScraper {
     static WebDriver driver;
     static WebDriverWait wait;
 
-    // ── Odds tab display names (data-analytics-alias values for matching) ─────────
-    // Format: { internalName, partialText to match in button }
-    // Excluded: Asian handicap, European handicap, Draw no bet, Odd/Even
     static final String[][] ODDS_TABS = {
             {"1x2",          "1X2"},
             {"Over/Under",   "Over/Under"},
             {"Both teams",   "Both teams to score"},
             {"Double chance","Double chance"},
-            {"Correct score","Correct score"},
-            {"HT/FT",        "Half Time/Full Time"}
+            {"Correct score","Correct score"}
     };
 
-    static final String[] TIME_TABS = {"Full Time", "1st Half", "2nd Half"};
+    static final String[] HALF_TABS = {"1st Half", "2nd Half"};
 
     static class OddEntry {
         String tab, period, label, opening;
@@ -46,7 +42,8 @@ public class FlashScoreScraper {
         List<OddEntry> odds = new ArrayList<>();
     }
 
-    static LinkedHashMap<String, Integer> columnMap = new LinkedHashMap<>();
+    // columnMap: "tab|period|label" -> sutun indeksi (siralama ucun ArrayList istifade edirik)
+    static List<String> columnKeys = new ArrayList<>();
 
     // ══════════════════════════════════════════════════════════════════════════════
     public static void main(String[] args) throws Exception {
@@ -99,6 +96,11 @@ public class FlashScoreScraper {
             driver.quit();
         }
 
+        // DEBUG: columnKeys-i yoxla
+        System.out.println("\n=== DEBUG: columnKeys (" + columnKeys.size() + " eded) ===");
+        for (String k : columnKeys) System.out.println("  " + k);
+        System.out.println("=== DEBUG END ===\n");
+
         String filename = "flashscore_bet365_" +
                 LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".xlsx";
         exportToExcel(allData, filename);
@@ -111,11 +113,9 @@ public class FlashScoreScraper {
     static MatchData scrapeMatch(String matchId, String home, String away, String date)
             throws InterruptedException {
 
-        // 1. Open match page
         driver.get("https://www.flashscore.co.uk/match/football/" + matchId);
         Thread.sleep(3000);
 
-        // 2. Click "Odds" main tab (the top-level tab on the match page)
         if (!clickButtonContaining("Odds")) {
             System.out.println("    [SKIP] Odds tab bulunamadi: " + matchId);
             return null;
@@ -125,36 +125,66 @@ public class FlashScoreScraper {
         MatchData md = new MatchData();
         md.matchId=matchId; md.homeTeam=home; md.awayTeam=away; md.date=date;
 
-        // 3. For each odds type tab (1X2, Over/Under, ...)
         for (String[] tabDef : ODDS_TABS) {
-            String tabName    = tabDef[0];
-            String tabText    = tabDef[1];
+            String tabName = tabDef[0];
+            String tabText = tabDef[1];
 
-            // Click the secondary odds-type tab (1X2, Over/Under, etc.)
-            // These are <a data-analytics-alias="..."><button> elements
             if (!clickOddsTypeTab(tabText)) {
-                System.out.println("    [SKIP] Odds tab bulunamadi: " + tabText);
+                System.out.println("    [SKIP] Odds type tab bulunamadi: " + tabText);
                 continue;
             }
             Thread.sleep(2000);
 
-            // 4. For each time period (Full Time, 1st Half, 2nd Half)
-            for (String period : TIME_TABS) {
-                if (!clickTimeTab(period)) continue;
-                Thread.sleep(1800);
+            // ── FULL TIME ─────────────────────────────────────────────────────────
+            // Odds type tabina kecdikde default olaraq Full Time aktiv olur.
+            waitForBet365Row();
+            List<OddEntry> ftEntries = scrapeBet365Rows(tabName, "Full Time");
+            md.odds.addAll(ftEntries);
+            for (OddEntry e : ftEntries) {
+                String key = e.tab + "|" + e.period + "|" + e.label;
+                if (!columnKeys.contains(key)) columnKeys.add(key);
+            }
+            System.out.println("      [FT] " + tabName + " -> " + ftEntries.size() + " odd");
 
+            // ── 1ST HALF & 2ND HALF ───────────────────────────────────────────────
+            for (String period : HALF_TABS) {
+                if (!clickTimeTab(period)) {
+                    System.out.println("      [SKIP] Period tab yoxdur: " + period + " / " + tabName);
+                    continue;
+                }
+                waitForBet365Row();
                 List<OddEntry> entries = scrapeBet365Rows(tabName, period);
                 md.odds.addAll(entries);
                 for (OddEntry e : entries) {
-                    columnMap.putIfAbsent(e.tab+"|"+e.period+"|"+e.label, columnMap.size());
+                    String key = e.tab + "|" + e.period + "|" + e.label;
+                    if (!columnKeys.contains(key)) columnKeys.add(key);
                 }
+                System.out.println("      [" + period + "] " + tabName + " -> " + entries.size() + " odd");
             }
         }
         return md;
     }
 
-    // ── Click a top-level match tab (Odds, Summary, etc.) ────────────────────────
-    // These are [data-testid='wcl-tab'] buttons
+    // ── Bet365 rowunun yuklenmesini gozle (max 8 saniye) ─────────────────────────
+    static void waitForBet365Row() throws InterruptedException {
+        int maxAttempts = 16;
+        for (int i = 0; i < maxAttempts; i++) {
+            try {
+                List<WebElement> rows = driver.findElements(By.cssSelector(".ui-table__row"));
+                for (WebElement row : rows) {
+                    if (!row.findElements(
+                            By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty()) {
+                        Thread.sleep(300);
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {}
+            Thread.sleep(500);
+        }
+        System.out.println("      [WARN] Bet365 rowu gozleme muddeti asdi.");
+    }
+
+    // ── Esas mac tabina klik ──────────────────────────────────────────────────────
     static boolean clickButtonContaining(String text) throws InterruptedException {
         try {
             List<WebElement> tabs = wait.until(
@@ -173,12 +203,9 @@ public class FlashScoreScraper {
         return false;
     }
 
-    // ── Click secondary odds-type tab (1X2 / Over/Under / Both teams / ...) ───────
-    // These are <a data-analytics-alias="..."> containing a <button>
-    // We match on the <a title="..."> attribute or the button text
+    // ── Odds type tabina klik ─────────────────────────────────────────────────────
     static boolean clickOddsTypeTab(String tabText) throws InterruptedException {
         try {
-            // Strategy A: match <a> by title attribute
             List<WebElement> anchors = driver.findElements(
                     By.cssSelector("a[data-analytics-alias]"));
             for (WebElement a : anchors) {
@@ -190,7 +217,6 @@ public class FlashScoreScraper {
                     return true;
                 }
             }
-            // Strategy B: match button text inside those anchors
             for (WebElement a : anchors) {
                 try {
                     WebElement btn = a.findElement(By.cssSelector("button"));
@@ -207,18 +233,19 @@ public class FlashScoreScraper {
         return false;
     }
 
-    // ── Click Full Time / 1st Half / 2nd Half inner tab ──────────────────────────
-    // These are also [data-testid='wcl-tab'] but with text FULLTIME / 1ST HALF / 2ND HALF
+    // ── 1st Half / 2nd Half tabina klik ──────────────────────────────────────────
     static boolean clickTimeTab(String period) throws InterruptedException {
         try {
             List<WebElement> tabs = driver.findElements(
                     By.cssSelector("[data-testid='wcl-tab']"));
             for (WebElement tab : tabs) {
-                String txt = tab.getText().trim().toUpperCase().replaceAll("\\s+","");
+                String txt = tab.getText().trim().toUpperCase().replaceAll("\\s+", "");
                 boolean match = false;
-                if (period.equals("Full Time") && (txt.startsWith("FULLTIME") || txt.startsWith("FULL"))) match=true;
-                if (period.equals("1st Half")  && (txt.startsWith("1ST") || txt.startsWith("1STHALF")))  match=true;
-                if (period.equals("2nd Half")  && (txt.startsWith("2ND") || txt.startsWith("2NDHALF")))  match=true;
+                if (period.equals("1st Half") &&
+                        (txt.startsWith("1ST") || txt.equals("HT") ||
+                                txt.startsWith("1STHALF"))) match = true;
+                if (period.equals("2nd Half") &&
+                        (txt.startsWith("2ND") || txt.startsWith("2NDHALF"))) match = true;
                 if (match) {
                     ((JavascriptExecutor)driver).executeScript("arguments[0].click();", tab);
                     Thread.sleep(1500);
@@ -239,52 +266,43 @@ public class FlashScoreScraper {
         try {
             List<WebElement> rows = driver.findElements(By.cssSelector(".ui-table__row"));
             for (WebElement row : rows) {
-                // Is this a Bet365 row?
-                if (row.findElements(By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty())
+                if (row.findElements(
+                        By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty())
                     continue;
 
-                List<OddEntry> parsed;
                 switch (tabName) {
                     case "1x2":
-                        parsed = parse1x2(row, tabName, period);
-                        result.addAll(parsed);
-                        break; // only one Bet365 row
+                        result.addAll(parse1x2(row, tabName, period));
+                        break;
                     case "Over/Under":
-                        parsed = parseOverUnder(row, tabName, period);
-                        result.addAll(parsed);
-                        // DON'T break — multiple rows (one per total line)
+                        result.addAll(parseOverUnder(row, tabName, period));
                         continue;
                     case "Both teams":
-                        parsed = parseLabeledCells(row, tabName, period, new String[]{"Yes","No"});
-                        result.addAll(parsed);
+                        result.addAll(parseLabeledCells(row, tabName, period,
+                                new String[]{"Yes", "No"}));
                         break;
                     case "Double chance":
-                        parsed = parseLabeledCells(row, tabName, period, new String[]{"1X","12","X2"});
-                        result.addAll(parsed);
+                        result.addAll(parseLabeledCells(row, tabName, period,
+                                new String[]{"1X", "12", "X2"}));
                         break;
                     case "Correct score":
-                        parsed = parseCorrectScore(row, tabName, period);
-                        result.addAll(parsed);
-                        continue; // multiple rows
-                    case "HT/FT":
-                        parsed = parseLabeledCells(row, tabName, period,
-                                new String[]{"1/1","1/X","1/2","X/1","X/X","X/2","2/1","2/X","2/2"});
-                        result.addAll(parsed);
-                        continue; // multiple rows possible
+                        result.addAll(parseCorrectScore(row, tabName, period));
+                        continue;
                     default:
                         break;
                 }
-                break;
+                break; // Over/Under ve Correct score xaricinde ilk Bet365 rowundan sonra dayan
             }
         } catch (Exception e) {
-            System.out.println("    scrapeBet365Rows ["+tabName+"/"+period+"]: " + e.getMessage());
+            System.out.println("    scrapeBet365Rows [" + tabName + "/" + period + "]: "
+                    + e.getMessage());
         }
         return result;
     }
 
     static List<OddEntry> parse1x2(WebElement row, String tab, String period) {
         List<OddEntry> r = new ArrayList<>();
-        String[] labels = {"Home","Draw","Away"};
+        String[] labels = {"Home", "Draw", "Away"};
         List<WebElement> cells = row.findElements(By.cssSelector("a.oddsCell__odd"));
         for (int i = 0; i < Math.min(cells.size(), labels.length); i++)
             r.add(new OddEntry(tab, period, labels[i], extractOpeningOdd(cells.get(i))));
@@ -295,15 +313,19 @@ public class FlashScoreScraper {
         List<OddEntry> r = new ArrayList<>();
         String total = "?";
         try {
-            total = row.findElement(By.cssSelector("[data-testid='wcl-oddsValue']")).getText().trim();
+            total = row.findElement(
+                    By.cssSelector("[data-testid='wcl-oddsValue']")).getText().trim();
         } catch (Exception ignored) {}
         List<WebElement> cells = row.findElements(By.cssSelector("a.oddsCell__odd"));
-        if (cells.size() >= 1) r.add(new OddEntry(tab, period, "O "+total, extractOpeningOdd(cells.get(0))));
-        if (cells.size() >= 2) r.add(new OddEntry(tab, period, "U "+total, extractOpeningOdd(cells.get(1))));
+        if (cells.size() >= 1)
+            r.add(new OddEntry(tab, period, "O " + total, extractOpeningOdd(cells.get(0))));
+        if (cells.size() >= 2)
+            r.add(new OddEntry(tab, period, "U " + total, extractOpeningOdd(cells.get(1))));
         return r;
     }
 
-    static List<OddEntry> parseLabeledCells(WebElement row, String tab, String period, String[] labels) {
+    static List<OddEntry> parseLabeledCells(WebElement row, String tab,
+                                            String period, String[] labels) {
         List<OddEntry> r = new ArrayList<>();
         List<WebElement> cells = row.findElements(By.cssSelector("a.oddsCell__odd"));
         for (int i = 0; i < Math.min(cells.size(), labels.length); i++)
@@ -313,30 +335,26 @@ public class FlashScoreScraper {
 
     static List<OddEntry> parseCorrectScore(WebElement row, String tab, String period) {
         List<OddEntry> r = new ArrayList<>();
-        // Score label: try to find it from a dedicated element, fallback to row text prefix
         String scoreLabel = "?";
         try {
-            // The score label is often the first text element in the row before odds cells
-            // Try reading via JavaScript the first text node or a specific child
             scoreLabel = (String) ((JavascriptExecutor)driver).executeScript(
                     "var el = arguments[0]; " +
-                            "var spans = el.querySelectorAll('span:not(.oddsCell__arrow):not(.oddsCell__linkIcon)'); " +
-                            "for(var i=0;i<spans.length;i++){ var t=spans[i].textContent.trim(); " +
-                            "if(t.match(/^\\d+:\\d+$/)) return t; } return null;", row);
+                            "var spans = el.querySelectorAll(" +
+                            "'span:not(.oddsCell__arrow):not(.oddsCell__linkIcon)'); " +
+                            "for(var i=0;i<spans.length;i++){" +
+                            " var t=spans[i].textContent.trim(); " +
+                            " if(t.match(/^\\d+:\\d+$/)) return t; } return null;", row);
         } catch (Exception ignored) {}
         if (scoreLabel == null || scoreLabel.equals("?")) {
             try {
-                String rawText = row.getText().trim();
-                // Extract "0:0", "1:0" etc patterns
                 java.util.regex.Matcher m = java.util.regex.Pattern
-                        .compile("(\\d+:\\d+)").matcher(rawText);
+                        .compile("(\\d+:\\d+)").matcher(row.getText().trim());
                 if (m.find()) scoreLabel = m.group(1);
             } catch (Exception ignored) {}
         }
         List<WebElement> cells = row.findElements(By.cssSelector("a.oddsCell__odd"));
-        // Correct score rows usually have 1 odd cell
         for (int i = 0; i < cells.size(); i++) {
-            String lbl = scoreLabel + (cells.size() > 1 ? "_"+i : "");
+            String lbl = scoreLabel + (cells.size() > 1 ? "_" + i : "");
             r.add(new OddEntry(tab, period, lbl, extractOpeningOdd(cells.get(i))));
         }
         return r;
@@ -347,7 +365,6 @@ public class FlashScoreScraper {
             String title = cell.getAttribute("title");
             if (title != null && title.contains("»"))
                 return title.split("»")[0].trim();
-            // fallback: visible span text
             return cell.findElement(By.tagName("span")).getText().trim();
         } catch (Exception e) { return "N/A"; }
     }
@@ -370,13 +387,18 @@ public class FlashScoreScraper {
             if (settingsRow == null) {
                 for (WebElement el : driver.findElements(By.cssSelector(".contextMenu__text"))) {
                     if (el.getText().trim().equals("Settings")) {
-                        try { settingsRow = el.findElement(By.xpath("./ancestor::*[@role='button'][1]")); }
-                        catch (Exception ignored) {}
+                        try {
+                            settingsRow = el.findElement(
+                                    By.xpath("./ancestor::*[@role='button'][1]"));
+                        } catch (Exception ignored) {}
                         break;
                     }
                 }
             }
-            if (settingsRow == null) { System.out.println("  [Settings] Bulunamadi."); return; }
+            if (settingsRow == null) {
+                System.out.println("  [Settings] Bulunamadi.");
+                return;
+            }
             ((JavascriptExecutor)driver).executeScript("arguments[0].click();", settingsRow);
             Thread.sleep(2000);
 
@@ -391,12 +413,15 @@ public class FlashScoreScraper {
             }
 
             boolean closed = false;
-            for (String sel : new String[]{"[data-testid='wcl-dialogCloseButton']",
-                    "button.settings__closeButton","button.wcl-closeButton_6bc3P"}) {
+            for (String sel : new String[]{
+                    "[data-testid='wcl-dialogCloseButton']",
+                    "button.settings__closeButton",
+                    "button.wcl-closeButton_6bc3P"}) {
                 try {
                     ((JavascriptExecutor)driver).executeScript("arguments[0].click();",
                             driver.findElement(By.cssSelector(sel)));
-                    closed = true; break;
+                    closed = true;
+                    break;
                 } catch (Exception ignored) {}
             }
             if (!closed) driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
@@ -431,16 +456,17 @@ public class FlashScoreScraper {
         Thread.sleep(2000);
         List<String[]> result = new ArrayList<>();
         result.add(new String[]{"WYNDZibL", "Crystal Palace", "Newcastle"});
-//        for (WebElement row : driver.findElements(By.cssSelector("div[id^='g_1_'].event__match"))) {
+//        for (WebElement row : driver.findElements(
+//                By.cssSelector("div[id^='g_1_'].event__match"))) {
 //            try {
 //                String matchId = row.getAttribute("id").replace("g_1_","");
 //                String home="", away="";
 //                try { home = row.findElement(By.cssSelector(
-//                        ".event__homeParticipant [data-testid='wcl-scores-simple-text-01']")).getText().trim(); }
-//                catch (Exception ignored) {}
+//                  ".event__homeParticipant [data-testid='wcl-scores-simple-text-01']"))
+//                  .getText().trim(); } catch (Exception ignored) {}
 //                try { away = row.findElement(By.cssSelector(
-//                        ".event__awayParticipant [data-testid='wcl-scores-simple-text-01']")).getText().trim(); }
-//                catch (Exception ignored) {}
+//                  ".event__awayParticipant [data-testid='wcl-scores-simple-text-01']"))
+//                  .getText().trim(); } catch (Exception ignored) {}
 //                if (!matchId.isEmpty()) result.add(new String[]{matchId, home, away});
 //            } catch (Exception ignored) {}
 //        }
@@ -451,93 +477,117 @@ public class FlashScoreScraper {
     // EXCEL EXPORT
     // ══════════════════════════════════════════════════════════════════════════════
     static void exportToExcel(List<MatchData> data, String filename) throws IOException {
+
+        // Sutunlari siralayiriq: tab sirasi > period sirasi > label
+        columnKeys.sort((a, b) -> {
+            String[] pa = a.split("\\|"), pb = b.split("\\|");
+            int t = tabIdx(pa[0]) - tabIdx(pb[0]);
+            if (t != 0) return t;
+            int p = periodIdx(pa[1]) - periodIdx(pb[1]);
+            if (p != 0) return p;
+            return pa[2].compareTo(pb[2]);
+        });
+
+        // Siralama sonrasi index xeritesi
+        Map<String, Integer> colIndex = new LinkedHashMap<>();
+        for (int i = 0; i < columnKeys.size(); i++) colIndex.put(columnKeys.get(i), i);
+
         Workbook wb = new XSSFWorkbook();
         Sheet sheet = wb.createSheet("Bet365 Odds");
 
-        // Styles
-        CellStyle hStyle = makeStyle(wb, IndexedColors.DARK_BLUE,  IndexedColors.WHITE, true);
-        CellStyle tStyle = makeStyle(wb, IndexedColors.DARK_TEAL,  IndexedColors.WHITE, true);
+        CellStyle hStyle   = makeStyle(wb, IndexedColors.DARK_BLUE,  IndexedColors.WHITE, true);
+        CellStyle tStyle   = makeStyle(wb, IndexedColors.DARK_TEAL,  IndexedColors.WHITE, true);
         CellStyle altStyle = wb.createCellStyle();
         altStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
         altStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
-        // Sort columns: by tab order → period order → label
-        List<String> colKeys = new ArrayList<>(columnMap.keySet());
-        colKeys.sort((a, b) -> {
-            String[] pa = a.split("\\|"), pb = b.split("\\|");
-            int t = tabIdx(pa[0]) - tabIdx(pb[0]);
-            if (t!=0) return t;
-            int p = periodIdx(pa[1]) - periodIdx(pb[1]);
-            if (p!=0) return p;
-            return pa[2].compareTo(pb[2]);
-        });
-        columnMap.clear();
-        for (int i=0; i<colKeys.size(); i++) columnMap.put(colKeys.get(i), i);
+        final int FIXED = 4; // Date, Match ID, Home, Away
 
-        int FIXED = 4;
-
-        // Row 0: group headers (Tab | Period) merged
+        // ── Setir 0: qrup basliqlari ──────────────────────────────────────────────
         Row grpRow = sheet.createRow(0);
-        setCell(grpRow,0,"Date",hStyle);    sheet.setColumnWidth(0,14*256);
-        setCell(grpRow,1,"Match ID",hStyle);sheet.setColumnWidth(1,14*256);
-        setCell(grpRow,2,"Home",hStyle);    sheet.setColumnWidth(2,20*256);
-        setCell(grpRow,3,"Away",hStyle);    sheet.setColumnWidth(3,20*256);
+        setCell(grpRow, 0, "Date",     hStyle); sheet.setColumnWidth(0, 14*256);
+        setCell(grpRow, 1, "Match ID", hStyle); sheet.setColumnWidth(1, 14*256);
+        setCell(grpRow, 2, "Home",     hStyle); sheet.setColumnWidth(2, 20*256);
+        setCell(grpRow, 3, "Away",     hStyle); sheet.setColumnWidth(3, 20*256);
 
-        String lastGrp=""; int grpStart=FIXED;
-        for (Map.Entry<String,Integer> e : columnMap.entrySet()) {
-            String[] p = e.getKey().split("\\|");
-            String grp = p[0]+" | "+p[1];
-            int col = FIXED+e.getValue();
-            if (!grp.equals(lastGrp)) {
-                if (!lastGrp.isEmpty() && grpStart < col-1)
-                    sheet.addMergedRegion(new CellRangeAddress(0,0,grpStart,col-1));
-                setCell(grpRow, grpStart, lastGrp.isEmpty()? grp : grp, tStyle);
-                lastGrp=grp; grpStart=col;
-            }
+        // Her sutun ucun bashliq yaz, sonra eyni qruplari birles
+        String lastGrp = "";
+        int grpStartCol = FIXED;
+        for (int i = 0; i < columnKeys.size(); i++) {
+            String key   = columnKeys.get(i);
+            String[] p   = key.split("\\|");
+            String grp   = p[0] + " | " + p[1];
+            int col      = FIXED + i;
+
             sheet.setColumnWidth(col, 13*256);
+
+            if (!grp.equals(lastGrp)) {
+                // Yeni qrup bashlayir - evvelki qrupu merge et
+                if (!lastGrp.isEmpty() && grpStartCol < col - 1) {
+                    sheet.addMergedRegion(new CellRangeAddress(0, 0, grpStartCol, col - 1));
+                }
+                // Yeni qrup bashligi yaz
+                setCell(grpRow, col, grp, tStyle);
+                lastGrp = grp;
+                grpStartCol = col;
+            }
         }
+        // Sonuncu qrupu merge et
         if (!lastGrp.isEmpty()) {
-            int lastCol = FIXED+columnMap.size()-1;
-            if (grpStart<lastCol) sheet.addMergedRegion(new CellRangeAddress(0,0,grpStart,lastCol));
-            Cell c = grpRow.getCell(grpStart);
-            if (c==null) setCell(grpRow,grpStart,lastGrp,tStyle);
+            int lastDataCol = FIXED + columnKeys.size() - 1;
+            if (grpStartCol < lastDataCol) {
+                sheet.addMergedRegion(new CellRangeAddress(0, 0, grpStartCol, lastDataCol));
+            }
         }
 
-        // Row 1: label headers
+        // ── Setir 1: label basliqlari ─────────────────────────────────────────────
         Row lblRow = sheet.createRow(1);
-        setCell(lblRow,0,"Date",hStyle);
-        setCell(lblRow,1,"Match ID",hStyle);
-        setCell(lblRow,2,"Home",hStyle);
-        setCell(lblRow,3,"Away",hStyle);
-        for (Map.Entry<String,Integer> e : columnMap.entrySet())
-            setCell(lblRow, FIXED+e.getValue(), e.getKey().split("\\|")[2], hStyle);
+        setCell(lblRow, 0, "Date",     hStyle);
+        setCell(lblRow, 1, "Match ID", hStyle);
+        setCell(lblRow, 2, "Home",     hStyle);
+        setCell(lblRow, 3, "Away",     hStyle);
+        for (int i = 0; i < columnKeys.size(); i++) {
+            String label = columnKeys.get(i).split("\\|")[2];
+            setCell(lblRow, FIXED + i, label, hStyle);
+        }
 
-        // Data rows
-        int rowNum=2;
+        // ── Data setirleri ────────────────────────────────────────────────────────
+        int rowNum = 2;
         for (MatchData md : data) {
-            Row row = sheet.createRow(rowNum);
-            CellStyle cs = (rowNum%2==0)? altStyle : null;
-            setCell(row,0,md.date,cs);
-            setCell(row,1,md.matchId,cs);
-            setCell(row,2,md.homeTeam,cs);
-            setCell(row,3,md.awayTeam,cs);
+            Row row      = sheet.createRow(rowNum);
+            CellStyle cs = (rowNum % 2 == 0) ? altStyle : null;
+            setCell(row, 0, md.date,     cs);
+            setCell(row, 1, md.matchId,  cs);
+            setCell(row, 2, md.homeTeam, cs);
+            setCell(row, 3, md.awayTeam, cs);
 
-            Map<String,String> om = new HashMap<>();
-            for (OddEntry oe : md.odds) om.put(oe.tab+"|"+oe.period+"|"+oe.label, oe.opening);
-            for (Map.Entry<String,Integer> e : columnMap.entrySet())
-                setCell(row, FIXED+e.getValue(), om.getOrDefault(e.getKey(),"N/A"), cs);
+            // Macin oddlarini map-e yukle
+            Map<String,String> oddMap = new HashMap<>();
+            for (OddEntry oe : md.odds)
+                oddMap.put(oe.tab + "|" + oe.period + "|" + oe.label, oe.opening);
+
+            // Her sutun ucun deger yaz
+            for (int i = 0; i < columnKeys.size(); i++) {
+                String val = oddMap.getOrDefault(columnKeys.get(i), "N/A");
+                setCell(row, FIXED + i, val, cs);
+            }
             rowNum++;
         }
 
-        sheet.createFreezePane(0,2);
-        try (FileOutputStream fos = new FileOutputStream(filename)) { wb.write(fos); }
+        sheet.createFreezePane(0, 2);
+        try (FileOutputStream fos = new FileOutputStream(filename)) {
+            wb.write(fos);
+        }
         wb.close();
-        System.out.println("Toplam " + (rowNum-2) + " mac, " + columnMap.size() + " sutun yazildi.");
+        System.out.println("Toplam " + (rowNum - 2) + " mac, "
+                + columnKeys.size() + " sutun yazildi.");
     }
 
     static CellStyle makeStyle(Workbook wb, IndexedColors bg, IndexedColors fg, boolean bold) {
         CellStyle s = wb.createCellStyle();
-        Font f = wb.createFont(); f.setBold(bold); f.setColor(fg.getIndex());
+        Font f = wb.createFont();
+        f.setBold(bold);
+        f.setColor(fg.getIndex());
         s.setFont(f);
         s.setFillForegroundColor(bg.getIndex());
         s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
@@ -547,18 +597,20 @@ public class FlashScoreScraper {
 
     static void setCell(Row row, int col, String val, CellStyle style) {
         Cell c = row.createCell(col);
-        c.setCellValue(val!=null?val:"");
-        if (style!=null) c.setCellStyle(style);
+        c.setCellValue(val != null ? val : "");
+        if (style != null) c.setCellStyle(style);
     }
 
     static int tabIdx(String tab) {
-        for (int i=0;i<ODDS_TABS.length;i++) if(ODDS_TABS[i][0].equals(tab)) return i;
+        for (int i = 0; i < ODDS_TABS.length; i++)
+            if (ODDS_TABS[i][0].equals(tab)) return i;
         return 99;
     }
+
     static int periodIdx(String p) {
-        if(p.equals("Full Time")) return 0;
-        if(p.equals("1st Half"))  return 1;
-        if(p.equals("2nd Half"))  return 2;
+        if (p.equals("Full Time")) return 0;
+        if (p.equals("1st Half"))  return 1;
+        if (p.equals("2nd Half"))  return 2;
         return 3;
     }
 }
