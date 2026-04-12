@@ -12,9 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class OnlyLeagueScraper {
 
@@ -55,45 +53,67 @@ public class OnlyLeagueScraper {
         List<Boolean> played   = new ArrayList<>();
 
         for (Element row : tableBody.select("tr")) {
-            if (row.selectFirst("td[itemprop=sportsevent]") != null) break;
             if (row.hasClass("competition")) continue;
+
             Element homeEl = row.selectFirst("td:nth-child(3)");
             Element awayEl = row.selectFirst("td:nth-child(7)");
             if (homeEl == null || awayEl == null) continue;
+
+            // Oynanan maç skoru
             Element scoreEl = row.selectFirst("td:nth-child(5) b a");
             String score = scoreEl != null ? scoreEl.text().trim() : "";
+
+            // Gelecek maç mı? itemprop=sportsevent olan satırlar oynanmamış
+            boolean isFuture = row.selectFirst("td[itemprop=sportsevent]") != null;
+
             homeTeams.add(homeEl.text().trim());
             awayTeams.add(awayEl.text().trim());
             scores.add(score);
-            played.add(score.contains("-") && !score.equalsIgnoreCase("v"));
+
+            boolean isPlayed = !isFuture
+                    && score.contains("-")
+                    && !score.trim().equalsIgnoreCase("v")
+                    && !score.trim().isEmpty()
+                    && !score.trim().equals("-");
+            played.add(isPlayed);
         }
 
+        // Son iki oynanan maçı bul (sondan başa)
         int lastIdx = -1;
+        int secondLastIdx = -1;
         for (int i = scores.size() - 1; i >= 0; i--) {
-            if (played.get(i)) { lastIdx = i; break; }
+            if (played.get(i)) {
+                if (lastIdx == -1) {
+                    lastIdx = i;
+                } else {
+                    secondLastIdx = i;
+                    break;
+                }
+            }
         }
 
-        if (lastIdx < 0)           throw new RuntimeException("Oynanan mac yok: " + teamId);
-        if (lastIdx + 2 >= scores.size()) throw new RuntimeException("Sonraki 2 mac bulunamadi: " + teamId);
+        if (lastIdx < 0 || secondLastIdx < 0)
+            throw new RuntimeException("2 oynanan mac bulunamadi: " + teamId);
 
-        String score1  = scores.get(lastIdx);
-        String home1   = homeTeams.get(lastIdx);
-        String away1   = awayTeams.get(lastIdx);
-        String midHome = homeTeams.get(lastIdx + 1);
-        String midAway = awayTeams.get(lastIdx + 1);
-        String home2   = homeTeams.get(lastIdx + 2);
-        String away2   = awayTeams.get(lastIdx + 2);
+        String score1 = scores.get(secondLastIdx);
+        String home1  = homeTeams.get(secondLastIdx);
+        String away1  = awayTeams.get(secondLastIdx);
 
-        // Mevcut pattern ekrana bas
-        System.out.println("\n╔══════════════════════════════════════════════════════╗");
-        System.out.printf ("║  MEVCUT PATTERN — %-33s║%n", teamName);
-        System.out.println("╠══════════════════════════════════════════════════════╣");
-        System.out.printf ("║  [1] %-20s %5s %-20s ║%n", home1, score1, away1);
-        System.out.printf ("║  [2] %-20s  vs   %-15s(?)║%n", midHome, midAway);
-        System.out.printf ("║  [3] %-20s  vs   %-20s ║%n", home2, away2);
-        System.out.println("╚══════════════════════════════════════════════════════╝\n");
+        String score2 = scores.get(lastIdx);
+        String home2  = homeTeams.get(lastIdx);
+        String away2  = awayTeams.get(lastIdx);
 
-        return new MatchPattern(score1, null, home1, away1, home2, away2, teamName, midHome, midAway);
+        // lastIdx'ten sonraki ilk oynanmamış maçı bul
+        String nextHome = null, nextAway = null;
+        for (int i = lastIdx + 1; i < scores.size(); i++) {
+            if (!played.get(i)) {
+                nextHome = homeTeams.get(i);
+                nextAway = awayTeams.get(i);
+                break;
+            }
+        }
+
+        return new MatchPattern(score1, score2, home1, away1, home2, away2, teamName, nextHome, nextAway);
     }
 
     public static List<MatchResult> findScorePattern(CloseableHttpClient httpClient, MatchPattern pattern,
@@ -116,57 +136,48 @@ public class OnlyLeagueScraper {
                 leagueMatches.add(row);
         }
 
-        // 3'lu pencere ara
-        for (int i = 0; i < leagueMatches.size() - 2; i++) {
-            Element row1   = leagueMatches.get(i);
-            Element rowMid = leagueMatches.get(i + 1);
-            Element row2   = leagueMatches.get(i + 2);
+        // ✅ TÜM TAKIMLAR — pattern'daki 4 takım ismi
+        Set<String> patternTeams = new HashSet<>(Arrays.asList(
+                pattern.homeTeam1, pattern.awayTeam1,
+                pattern.homeTeam2, pattern.awayTeam2
+        ));
+
+        // ✅ 2'Lİ PENCERE ARA
+        for (int i = 0; i < leagueMatches.size() - 1; i++) {
+            Element row1 = leagueMatches.get(i);
+            Element row2 = leagueMatches.get(i + 1);
 
             try {
-                String home1 = row1.selectFirst("td:nth-child(3)").text().trim();
-                String away1 = row1.selectFirst("td:nth-child(7)").text().trim();
-                String home2 = row2.selectFirst("td:nth-child(3)").text().trim();
-                String away2 = row2.selectFirst("td:nth-child(7)").text().trim();
+                String score1 = row1.selectFirst("td:nth-child(5) b a").text().trim();
+                String score2 = row2.selectFirst("td:nth-child(5) b a").text().trim();
 
-                boolean firstOk  = (home1.equals(pattern.homeTeam1) && away1.equals(pattern.awayTeam1)) ||
-                        (home1.equals(pattern.awayTeam1) && away1.equals(pattern.homeTeam1));
-                boolean secondOk = pattern.homeTeam2 != null &&
-                        ((home2.equals(pattern.homeTeam2) && away2.equals(pattern.awayTeam2)) ||
-                                (home2.equals(pattern.awayTeam2) && away2.equals(pattern.homeTeam2)));
+                // Skor eşleşmeli
+                if (!score1.equals(pattern.score1) || !score2.equals(pattern.score2)) continue;
 
-                if (!firstOk || !secondOk) continue;
+                // En az 1 takım ismi eşleşmeli
+                String h1 = row1.selectFirst("td:nth-child(3)").text().trim();
+                String a1 = row1.selectFirst("td:nth-child(7)").text().trim();
+                String h2 = row2.selectFirst("td:nth-child(3)").text().trim();
+                String a2 = row2.selectFirst("td:nth-child(7)").text().trim();
 
-                String midScore  = rowMid.selectFirst("td:nth-child(5) b a").text().trim();
-                String midResult = extractComebackResult(rowMid);
+                boolean teamMatch = patternTeams.contains(h1) || patternTeams.contains(a1)
+                        || patternTeams.contains(h2) || patternTeams.contains(a2);
 
-                if (!COMEBACK_RESULTS.contains(midResult)) continue;
+                if (!teamMatch) continue;
 
-                // ESLESME BULUNDU — sadece bu 3 maci yazdir
-                String score1  = row1.selectFirst("td:nth-child(5) b a").text().trim();
-                String ht1     = nullIfEmpty(row1.selectFirst("td:nth-child(9)").text().trim());
-                String midHome = rowMid.selectFirst("td:nth-child(3)").text().trim();
-                String midAway = rowMid.selectFirst("td:nth-child(7)").text().trim();
-                String midHT   = nullIfEmpty(rowMid.selectFirst("td:nth-child(9)").text().trim());
-                String score2  = row2.selectFirst("td:nth-child(5) b a").text().trim();
-                String ht2     = nullIfEmpty(row2.selectFirst("td:nth-child(9)").text().trim());
+                // EŞLEŞME BULUNDU
+                String ht1 = nullIfEmpty(row1.selectFirst("td:nth-child(9)").text().trim());
+                String ht2 = nullIfEmpty(row2.selectFirst("td:nth-child(9)").text().trim());
 
-                System.out.println("  ┌─ ESLESTI! " + pattern.teamName + " — " + seasonYear + " ─────────────────────┐");
-                System.out.printf ("  │ [1] %-20s %5s %-20s (HT: %s)│%n", home1, score1, away1, nvl(ht1));
-                System.out.printf ("  │ [2] %-20s %5s %-20s (HT: %s) *** %s ***│%n", midHome, midScore, midAway, nvl(midHT), midResult);
-                System.out.printf ("  │ [3] %-20s %5s %-20s (HT: %s)│%n", home2, score2, away2, nvl(ht2));
-                System.out.println("  └─────────────────────────────────────────────────────────┘");
 
-                MatchResult result = new MatchResult(home1, away1, score1, seasonYear, pattern);
-                result.firstMatchHTScore   = ht1;
-                result.middleHomeTeam      = midHome;
-                result.middleAwayTeam      = midAway;
-                result.middleScore         = midScore + " (" + midResult + ")";
-                result.middleHTScore       = midHT;
-                result.secondMatchHomeTeam = home2;
-                result.secondMatchScore    = score2;
-                result.secondMatchAwayTeam = away2;
-                result.secondMatchHTScore  = ht2;
+                MatchResult result = new MatchResult(h1, a1, score1, seasonYear, pattern);
+                result.firstMatchHTScore    = ht1;
+                result.secondMatchHomeTeam  = h2;
+                result.secondMatchAwayTeam  = a2;
+                result.secondMatchScore     = score2;
+                result.secondMatchHTScore   = ht2;
 
+                // Önceki maç
                 if (i > 0) {
                     Element prev = leagueMatches.get(i - 1);
                     String ps = prev.selectFirst("td:nth-child(5) b a").text().trim();
@@ -178,8 +189,9 @@ public class OnlyLeagueScraper {
                     result.previousMatchScore = "Bilgi Yok (Ilk Mac)";
                 }
 
-                if (i + 3 < leagueMatches.size()) {
-                    Element next = leagueMatches.get(i + 3);
+                // Sonraki maç
+                if (i + 2 < leagueMatches.size()) {
+                    Element next = leagueMatches.get(i + 2);
                     String ns = next.selectFirst("td:nth-child(5) b a").text().trim();
                     String nh = next.selectFirst("td:nth-child(3)").text().trim();
                     String na = next.selectFirst("td:nth-child(7)").text().trim();

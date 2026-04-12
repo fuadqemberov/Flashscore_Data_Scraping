@@ -89,18 +89,40 @@ public class HttpVirtualThreadedPatternAnalyzer {
 
         private String formatResultsString(MatchPattern pattern, Map<Integer, List<MatchResult>> allMatches) {
             StringBuilder report = new StringBuilder();
-            report.append(String.format("=== Team ID: %d (%s) ===\n", teamId, pattern.teamName));
-            report.append("Aranan skor paterni:\n").append(pattern.toString()).append("\n");
+
+            // Üst kutu — mevcut pattern + oynanacak maç
+            String line1 = String.format("%s  %s  %s", pattern.homeTeam1, pattern.score1, pattern.awayTeam1);
+            String line2 = String.format("%s  %s  %s", pattern.homeTeam2, pattern.score2, pattern.awayTeam2);
+            String line3 = String.format("%s  vs  %s  (?)", pattern.nextHomeTeam, pattern.nextAwayTeam);
+
+            report.append("\n┌─────────────────────────────────────────────────────┐\n");
+            report.append(String.format("│  ✅ %-49s│%n", pattern.teamName));
+            report.append("├─────────────────────────────────────────────────────┤\n");
+            report.append(String.format("│  [1] %-47s│%n", line1));
+            report.append(String.format("│  [2] %-47s│%n", line2));
+            report.append(String.format("│  [3] %-47s│%n", line3));
+            report.append("└─────────────────────────────────────────────────────┘\n");
+
+            // Bulunan eşleşmeler
             for (Map.Entry<Integer, List<MatchResult>> entry : allMatches.entrySet()) {
-                report.append("\n").append(entry.getKey()).append(" Sezonu Analizi:\n");
-                report.append("------------------------\n");
-                String seasonResults = entry.getValue().stream()
-                        .map(MatchResult::toString)
-                        .collect(Collectors.joining("\n\n"));
-                report.append(seasonResults).append("\n");
+                String season = entry.getKey() + "/" + (entry.getKey() + 1);
+                for (MatchResult r : entry.getValue()) {
+                    report.append(String.format("\n  📅 %s\n", season));
+                    report.append(String.format("  ├ önceki  : %s  (HT: %s)%n",
+                            r.previousMatchScore, nvl(r.previousHTScore)));
+                    report.append(String.format("  ├ [1]     : %s  %s  %s  (HT: %s)%n",
+                            r.homeTeam, r.score, r.awayTeam, nvl(r.firstMatchHTScore)));
+                    report.append(String.format("  ├ [2]     : %s  %s  %s  (HT: %s)%n",
+                            r.secondMatchHomeTeam, r.secondMatchScore, r.secondMatchAwayTeam, nvl(r.secondMatchHTScore)));
+                    report.append(String.format("  └ sonraki : %s  (HT: %s)%n",
+                            r.nextMatchScore, nvl(r.nextHTScore)));
+                }
             }
+
             return report.toString();
         }
+
+        private String nvl(String s) { return s != null ? s : "N/A"; }
     }
 
     public static void main(String[] args) {

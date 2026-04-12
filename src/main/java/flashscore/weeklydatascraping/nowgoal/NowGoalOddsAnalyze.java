@@ -19,7 +19,7 @@ import java.util.logging.Logger;
 public class NowGoalOddsAnalyze {
 
     static String baseHost = "https://live5.nowgoal26.com/";
-    static int geriyeGidilecekSezonSayisi = 5;
+    static int geriyeGidilecekSezonSayisi = 10;
     static final Semaphore BROWSER_SEMAPHORE = new Semaphore(5);
 
     public static void main(String[] args) {
