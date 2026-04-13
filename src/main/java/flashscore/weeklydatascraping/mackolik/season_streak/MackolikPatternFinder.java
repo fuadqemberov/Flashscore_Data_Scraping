@@ -25,7 +25,7 @@ public class MackolikPatternFinder {
     private static final String TEAM_IDS_FILE = "team_ids.txt";
 
     private static final String[] SEASONS = {
-            "2025/2026", "2024/2025", "2023/2024", "2022/2023", "2021/2022"
+            "2024/2025", "2023/2024", "2022/2023", "2021/2022", "2020/2021"
     };
 
     private static final String[] MONTH_NUMS = {
