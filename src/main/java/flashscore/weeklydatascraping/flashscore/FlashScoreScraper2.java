@@ -31,8 +31,13 @@ public class FlashScoreScraper2 {
 
     static final String[] HALF_TABS = {"Full Time", "1st Half", "2nd Half"};
 
+    // ========== STATİK SÜTUN TANIMLARI ==========
     static final List<String> STATIC_COLUMN_KEYS = new ArrayList<>();
+
+    // Over/Under için istenen threshold'lar (0.5, 1.5, 2.5, 3.5, 4.5)
     static final List<Double> OU_THRESHOLDS = Arrays.asList(0.5, 1.5, 2.5, 3.5, 4.5);
+
+    // Correct score için sabit skor listesi
     static final List<String> CORRECT_SCORES = Arrays.asList(
             "1:0", "0:1", "1:1", "2:0", "0:2", "2:1", "1:2", "2:2",
             "3:0", "0:3", "3:1", "1:3", "3:2", "2:3", "3:3",
@@ -40,10 +45,14 @@ public class FlashScoreScraper2 {
     );
 
     static {
+        // Statik sütun anahtarlarını oluştur
         for (String[] tabDef : ODDS_TABS) {
-            String tabKey = tabDef[0];
+            String tabKey = tabDef[0]; // "1x2", "Over/Under", ...
             for (String period : HALF_TABS) {
-                if (tabKey.equals("Correct score") && period.equals("2nd Half")) continue;
+                // Correct score için 2nd Half yok, atla
+                if (tabKey.equals("Correct score") && period.equals("2nd Half")) {
+                    continue;
+                }
                 switch (tabKey) {
                     case "1x2":
                         for (String label : new String[]{"Home", "Draw", "Away"})
@@ -74,10 +83,12 @@ public class FlashScoreScraper2 {
 
     static class MatchData {
         String matchId, homeTeam, awayTeam, date, country, league, matchDateTime, ftScore, htScore;
-        Map<String, String> oddsMap = new HashMap<>();
+        Map<String, String> oddsMap = new HashMap<>();  // key -> oran veya "-"
     }
 
+    // ══════════════════════════════════════════════════════════════════════════════
     public static void main(String[] args) throws Exception {
+
         Scanner scanner = new Scanner(System.in);
         int days = 0;
         while (days < 1 || days > 7) {
@@ -87,6 +98,7 @@ public class FlashScoreScraper2 {
             if (days < 1 || days > 7) System.out.println("1 ile 7 arasinda bir deger girin.");
         }
 
+        // PERFORMANS: Tarayıcı optimizasyonları
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless=new");
         options.addArguments("--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage");
@@ -111,7 +123,10 @@ public class FlashScoreScraper2 {
                 System.out.println("\n>>> " + targetDate);
 
                 navigateToDay(dayOffset);
-                try { wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("div[id^='g_1_']"))); } catch (Exception ignored) {}
+
+                try {
+                    wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("div[id^='g_1_']")));
+                } catch (Exception ignored) {}
 
                 List<String[]> matches = collectMatchIds();
                 System.out.println("  " + matches.size() + " mac bulundu.");
@@ -125,19 +140,28 @@ public class FlashScoreScraper2 {
                 }
 
                 driver.get("https://www.flashscore.co.uk/football/");
-                try { wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("div[id^='g_1_']"))); } catch (Exception ignored) {}
+                try {
+                    wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("div[id^='g_1_']")));
+                } catch (Exception ignored) {}
             }
         } finally {
             driver.quit();
         }
 
-        String filename = "flashscore_bet365_static_" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".xlsx";
+        System.out.println("\n=== STATIC COLUMN KEYS (" + STATIC_COLUMN_KEYS.size() + " adet) ===");
+
+        String filename = "flashscore_bet365_static_" +
+                          LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".xlsx";
         exportToExcel(allData, filename);
         System.out.println("\nExcel olusturuldu: " + filename);
     }
 
+    // ══════════════════════════════════════════════════════════════════════════════
+    // MATCH SCRAPER
+    // ══════════════════════════════════════════════════════════════════════════════
     static MatchData scrapeMatch(String matchId, String home, String away, String date) {
         driver.get("https://www.flashscore.co.uk/match/football/" + matchId);
+
         try {
             wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(".detail__breadcrumbs, .duelParticipant")));
         } catch (Exception e) {
@@ -146,9 +170,17 @@ public class FlashScoreScraper2 {
         }
 
         MatchData md = new MatchData();
-        md.matchId=matchId; md.homeTeam=home; md.awayTeam=away; md.date=date;
-        md.country = "-"; md.league = "-"; md.matchDateTime = "-"; md.ftScore = "-"; md.htScore = "-";
+        md.matchId = matchId;
+        md.homeTeam = home;
+        md.awayTeam = away;
+        md.date = date;
+        md.country = "-";
+        md.league = "-";
+        md.matchDateTime = "-";
+        md.ftScore = "-";
+        md.htScore = "-";
 
+        // Temel bilgileri doldur (ülke, lig, tarih, skor)
         try {
             List<WebElement> breadcrumbs = driver.findElements(By.cssSelector(".detail__breadcrumbs a span[itemprop='name']"));
             if (breadcrumbs.size() >= 3) {
@@ -157,10 +189,15 @@ public class FlashScoreScraper2 {
             }
         } catch (Exception ignored) {}
 
-        try { md.matchDateTime = driver.findElement(By.cssSelector(".duelParticipant__startTime div")).getText().trim(); } catch (Exception ignored) {}
+        try {
+            md.matchDateTime = driver.findElement(By.cssSelector(".duelParticipant__startTime div")).getText().trim();
+        } catch (Exception ignored) {}
+
         try {
             List<WebElement> scoreSpans = driver.findElements(By.cssSelector(".detailScore__wrapper span"));
-            if (scoreSpans.size() >= 3) md.ftScore = scoreSpans.get(0).getText().trim() + "-" + scoreSpans.get(2).getText().trim();
+            if (scoreSpans.size() >= 3) {
+                md.ftScore = scoreSpans.get(0).getText().trim() + "-" + scoreSpans.get(2).getText().trim();
+            }
         } catch (Exception ignored) {}
 
         try {
@@ -184,13 +221,7 @@ public class FlashScoreScraper2 {
             return null;
         }
 
-        // Odds tabına tıkladıktan sonra bet365 varsayılan olarak seçili mi kontrol et
-        try {
-            Thread.sleep(1000);
-            // Eğer bet365 seçili değilse, dropdown'dan seçmeye çalış
-            selectBet365IfNeeded();
-        } catch (Exception e) {}
-
+        // Her ana tab (1x2, Over/Under, ...) için işlem
         for (String[] tabDef : ODDS_TABS) {
             String tabName = tabDef[0];
             String tabText = tabDef[1];
@@ -200,73 +231,87 @@ public class FlashScoreScraper2 {
                 continue;
             }
 
+            // Her period (Full Time, 1st Half, 2nd Half) için
             for (String period : HALF_TABS) {
-                if (tabName.equals("Correct score") && period.equals("2nd Half")) continue;
-
-                if (!period.equals("Full Time")) {
-                    if (!clickTimeTab(period)) continue;
+                // Correct score için 2nd Half yok, atla
+                if (tabName.equals("Correct score") && period.equals("2nd Half")) {
+                    continue;
                 }
 
-                if (!waitForBet365Row()) continue;
+                if (period.equals("Full Time")) {
+                    // Full Time zaten seçili durumda, ek tıklama gerekmez
+                } else {
+                    if (!clickTimeTab(period)) {
+                        continue;
+                    }
+                }
 
+                // bet365 satırlarının gelmesini bekle
+                if (!waitForBet365Row()) {
+                    continue; // bu period için hiç bet365 oranı yok
+                }
+
+                // Tab tipine göre özel işleyici
                 switch (tabName) {
-                    case "1x2": scrapeSimpleTab(md, tabName, period, new String[]{"Home", "Draw", "Away"}); break;
-                    case "Over/Under": scrapeOverUnderTab(md, tabName, period); break;
-                    case "Both teams": scrapeSimpleTab(md, tabName, period, new String[]{"Yes", "No"}); break;
-                    case "Double chance": scrapeSimpleTab(md, tabName, period, new String[]{"1X", "12", "X2"}); break;
-                    case "Correct score": scrapeCorrectScoreTab(md, tabName, period); break;
+                    case "1x2":
+                        scrapeSimpleTab(md, tabName, period, new String[]{"Home", "Draw", "Away"});
+                        break;
+                    case "Over/Under":
+                        scrapeOverUnderTab(md, tabName, period);
+                        break;
+                    case "Both teams":
+                        scrapeSimpleTab(md, tabName, period, new String[]{"Yes", "No"});
+                        break;
+                    case "Double chance":
+                        scrapeSimpleTab(md, tabName, period, new String[]{"1X", "12", "X2"});
+                        break;
+                    case "Correct score":
+                        scrapeCorrectScoreTab(md, tabName, period);
+                        break;
                 }
             }
         }
+
         return md;
     }
 
-    static void selectBet365IfNeeded() {
-        try {
-            // Dropdown'a tıkla
-            WebElement dropdown = driver.findElement(By.cssSelector("[data-testid='wcl-odds-dropdown']"));
-            ((JavascriptExecutor)driver).executeScript("arguments[0].click();", dropdown);
-            Thread.sleep(500);
-            // bet365 seçeneğini bul
-            List<WebElement> options = driver.findElements(By.cssSelector("[data-testid='wcl-odds-dropdown-option']"));
-            for (WebElement opt : options) {
-                if (opt.getText().contains("bet365")) {
-                    ((JavascriptExecutor)driver).executeScript("arguments[0].click();", opt);
-                    Thread.sleep(800);
-                    break;
-                }
-            }
-        } catch (Exception ignored) {}
-    }
-
+    // Basit etiketli tab'lar (1x2, Both teams, Double chance)
     static void scrapeSimpleTab(MatchData md, String tabName, String period, String[] labels) {
         try {
             List<WebElement> rows = driver.findElements(By.cssSelector(".ui-table__row"));
             for (WebElement row : rows) {
-                if (row.findElements(By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty() &&
-                    row.findElements(By.cssSelector("[data-bookmaker-id='16']")).isEmpty()) continue;
+                if (row.findElements(By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty()) continue;
                 List<WebElement> cells = row.findElements(By.cssSelector("a.oddsCell__odd"));
                 for (int i = 0; i < Math.min(cells.size(), labels.length); i++) {
                     String key = tabName + "|" + period + "|" + labels[i];
                     String odd = extractOpeningOdd(cells.get(i));
                     md.oddsMap.put(key, odd);
                 }
-                break;
+                break; // sadece ilk bet365 satırını al
             }
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            // hata durumunda hiçbir şey eklenmez, sonradan "-" kalır
+        }
     }
 
+    // Over/Under: sadece 0.5,1.5,2.5,3.5,4.5 threshold'larını al, eksik olanlara "-" ata
     static void scrapeOverUnderTab(MatchData md, String tabName, String period) {
-        Map<Double, String[]> thresholdOdds = new HashMap<>();
+        Map<Double, String[]> thresholdOdds = new HashMap<>(); // threshold -> [overOdd, underOdd]
         try {
             List<WebElement> rows = driver.findElements(By.cssSelector(".ui-table__row"));
             for (WebElement row : rows) {
-                if (row.findElements(By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty() &&
-                    row.findElements(By.cssSelector("[data-bookmaker-id='16']")).isEmpty()) continue;
+                if (row.findElements(By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty()) continue;
+                // threshold değerini bul (örn: "0.5", "1.5")
                 String totalText = "";
-                try { totalText = row.findElement(By.cssSelector("[data-testid='wcl-oddsValue']")).getText().trim(); } catch (Exception ignored) {}
+                try {
+                    totalText = row.findElement(By.cssSelector("[data-testid='wcl-oddsValue']")).getText().trim();
+                } catch (Exception ignored) {}
                 double threshold = -1;
-                try { threshold = Double.parseDouble(totalText); } catch (NumberFormatException e) { continue; }
+                try {
+                    threshold = Double.parseDouble(totalText);
+                } catch (NumberFormatException e) {
+                    continue;
+                }
 
                 List<WebElement> cells = row.findElements(By.cssSelector("a.oddsCell__odd"));
                 String overOdd = (cells.size() >= 1) ? extractOpeningOdd(cells.get(0)) : null;
@@ -275,6 +320,7 @@ public class FlashScoreScraper2 {
             }
         } catch (Exception e) {}
 
+        // Statik threshold'lar için map'e ekle
         for (double th : OU_THRESHOLDS) {
             String overKey = tabName + "|" + period + "|O " + th;
             String underKey = tabName + "|" + period + "|U " + th;
@@ -284,21 +330,27 @@ public class FlashScoreScraper2 {
         }
     }
 
+    // Correct score: sabit skor listesindeki her skor için oranı bul, yoksa "-"
     static void scrapeCorrectScoreTab(MatchData md, String tabName, String period) {
+        // Güvenlik kontrolü (zaten yukarıda engelleniyor, ama ekstra garanti)
         if (period.equals("2nd Half")) return;
+
         Map<String, String> scoreOddMap = new HashMap<>();
         try {
             List<WebElement> rows = driver.findElements(By.cssSelector(".ui-table__row"));
             for (WebElement row : rows) {
-                if (row.findElements(By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty() &&
-                    row.findElements(By.cssSelector("[data-bookmaker-id='16']")).isEmpty()) continue;
+                if (row.findElements(By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty()) continue;
+                // Skor etiketini al (örn: "1:0", "2:1")
                 String scoreLabel = null;
                 try {
+                    // Önce JavaScript ile span içinde skor formatı ara
                     scoreLabel = (String) ((JavascriptExecutor) driver).executeScript(
                             "var el = arguments[0]; var spans = el.querySelectorAll('span:not(.oddsCell__arrow):not(.oddsCell__linkIcon)'); " +
-                            "for(var i=0;i<spans.length;i++){ var t=spans[i].textContent.trim(); if(t.match(/^\\d+:\\d+$/)) return t; } return null;", row);
+                            "for(var i=0;i<spans.length;i++){ var t=spans[i].textContent.trim(); if(t.match(/^\\d+:\\d+$/)) return t; } return null;",
+                            row);
                 } catch (Exception ignored) {}
                 if (scoreLabel == null) {
+                    // Regex ile row metninden al
                     Pattern p = Pattern.compile("(\\d+:\\d+)");
                     java.util.regex.Matcher m = p.matcher(row.getText());
                     if (m.find()) scoreLabel = m.group(1);
@@ -307,12 +359,13 @@ public class FlashScoreScraper2 {
 
                 List<WebElement> cells = row.findElements(By.cssSelector("a.oddsCell__odd"));
                 if (!cells.isEmpty()) {
-                    String odd = extractOpeningOdd(cells.get(0));
+                    String odd = extractOpeningOdd(cells.get(0)); // her satırda tek oran olur
                     scoreOddMap.put(scoreLabel, odd);
                 }
             }
         } catch (Exception e) {}
 
+        // Statik skor listesindeki her skor için map'e ekle
         for (String score : CORRECT_SCORES) {
             String key = tabName + "|" + period + "|" + score;
             String odd = scoreOddMap.getOrDefault(score, "-");
@@ -323,7 +376,8 @@ public class FlashScoreScraper2 {
     static boolean waitForBet365Row() {
         try {
             WebDriverWait localWait = new WebDriverWait(driver, Duration.ofSeconds(5));
-            localWait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(".ui-table__row [data-analytics-bookmaker-id='16'], .ui-table__row [data-bookmaker-id='16']")));
+            localWait.until(ExpectedConditions.presenceOfElementLocated(
+                    By.cssSelector(".ui-table__row [data-analytics-bookmaker-id='16']")));
             return true;
         } catch (TimeoutException e) {
             return false;
@@ -332,10 +386,11 @@ public class FlashScoreScraper2 {
 
     static boolean clickButtonContaining(String text) {
         try {
-            List<WebElement> tabs = shortWait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(By.cssSelector("[data-testid='wcl-tab']")));
+            List<WebElement> tabs = shortWait.until(
+                    ExpectedConditions.presenceOfAllElementsLocatedBy(By.cssSelector("[data-testid='wcl-tab']")));
             for (WebElement tab : tabs) {
                 if (tab.getText().trim().toUpperCase().contains(text.toUpperCase())) {
-                    ((JavascriptExecutor)driver).executeScript("arguments[0].click();", tab);
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", tab);
                     Thread.sleep(400);
                     return true;
                 }
@@ -346,39 +401,27 @@ public class FlashScoreScraper2 {
 
     static boolean clickOddsTypeTab(String tabText) {
         try {
-            // Önce data-testid ile ara
+            // Yeni seçici: data-testid="wcl-tab" olan elementler (odds kategorileri için)
             List<WebElement> tabs = driver.findElements(By.cssSelector("[data-testid='wcl-tab']"));
             for (WebElement tab : tabs) {
-                String txt = tab.getText().trim();
-                if (txt.equalsIgnoreCase(tabText) || txt.toLowerCase().contains(tabText.toLowerCase())) {
-                    ((JavascriptExecutor)driver).executeScript("arguments[0].click();", tab);
+                String tabTitle = tab.getText().trim();
+                if (tabTitle.toLowerCase().contains(tabText.toLowerCase())) {
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", tab);
                     Thread.sleep(500);
                     return true;
                 }
             }
-            // Alternatif: a etiketleri içindeki button'lar
-            List<WebElement> anchors = driver.findElements(By.cssSelector("a[data-analytics-alias]"));
-            for (WebElement a : anchors) {
-                String title = a.getAttribute("title");
-                if (title != null && title.toLowerCase().contains(tabText.toLowerCase())) {
-                    WebElement btn = a.findElement(By.tagName("button"));
-                    ((JavascriptExecutor)driver).executeScript("arguments[0].click();", btn);
+            // Alternatif: button içinde ara
+            List<WebElement> buttons = driver.findElements(By.cssSelector("button"));
+            for (WebElement btn : buttons) {
+                String btnText = btn.getText().trim();
+                if (btnText.toLowerCase().contains(tabText.toLowerCase())) {
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
                     Thread.sleep(500);
                     return true;
                 }
             }
-            // Son çare: görünür metni içeren herhangi bir tıklanabilir öğe
-            List<WebElement> all = driver.findElements(By.xpath("//*[contains(text(),'" + tabText + "')]"));
-            for (WebElement el : all) {
-                if (el.isDisplayed() && el.isEnabled()) {
-                    ((JavascriptExecutor)driver).executeScript("arguments[0].click();", el);
-                    Thread.sleep(500);
-                    return true;
-                }
-            }
-        } catch (Exception e) {
-            System.out.println("    [DEBUG] clickOddsTypeTab hata: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
         return false;
     }
 
@@ -388,10 +431,14 @@ public class FlashScoreScraper2 {
             for (WebElement tab : tabs) {
                 String txt = tab.getText().trim().toUpperCase().replaceAll("\\s+", "");
                 boolean match = false;
-                if (period.equals("1st Half") && (txt.startsWith("1ST") || txt.equals("HT") || txt.startsWith("1STHALF"))) match = true;
-                if (period.equals("2nd Half") && (txt.startsWith("2ND") || txt.startsWith("2NDHALF"))) match = true;
+                if (period.equals("1st Half") &&
+                    (txt.startsWith("1ST") || txt.equals("HT") || txt.startsWith("1STHALF")))
+                    match = true;
+                if (period.equals("2nd Half") &&
+                    (txt.startsWith("2ND") || txt.startsWith("2NDHALF")))
+                    match = true;
                 if (match) {
-                    ((JavascriptExecutor)driver).executeScript("arguments[0].click();", tab);
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", tab);
                     Thread.sleep(400);
                     return true;
                 }
@@ -405,27 +452,34 @@ public class FlashScoreScraper2 {
             String title = cell.getAttribute("title");
             if (title != null && title.contains("»")) return title.split("»")[0].trim();
             return cell.findElement(By.tagName("span")).getText().trim();
-        } catch (Exception e) { return "N/A"; }
+        } catch (Exception e) {
+            return "N/A";
+        }
     }
 
+    // ══════════════════════════════════════════════════════════════════════════════
+    // SETTINGS / NAV HELPERS
+    // ══════════════════════════════════════════════════════════════════════════════
     static void configureDecimalOdds() throws InterruptedException {
         System.out.println("  [Settings] Decimal odds formati seciliyor...");
         try {
             WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(
                     By.cssSelector("#hamburger-menu div[role='button']")));
-            ((JavascriptExecutor)driver).executeScript("arguments[0].click();", btn);
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
             Thread.sleep(1500);
 
             WebElement settingsRow = null;
             for (WebElement row : driver.findElements(By.cssSelector(".contextMenu__row"))) {
-                if (row.getText().contains("Settings")) { settingsRow = row; break; }
+                if (row.getText().contains("Settings")) {
+                    settingsRow = row;
+                    break;
+                }
             }
             if (settingsRow == null) {
                 for (WebElement el : driver.findElements(By.cssSelector(".contextMenu__text"))) {
                     if (el.getText().trim().equals("Settings")) {
                         try {
-                            settingsRow = el.findElement(
-                                    By.xpath("./ancestor::*[@role='button'][1]"));
+                            settingsRow = el.findElement(By.xpath("./ancestor::*[@role='button'][1]"));
                         } catch (Exception ignored) {}
                         break;
                     }
@@ -435,14 +489,14 @@ public class FlashScoreScraper2 {
                 System.out.println("  [Settings] Bulunamadi.");
                 return;
             }
-            ((JavascriptExecutor)driver).executeScript("arguments[0].click();", settingsRow);
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", settingsRow);
             Thread.sleep(2000);
 
             for (WebElement lbl : driver.findElements(By.cssSelector("label"))) {
                 if (lbl.getText().contains("DECIMAL")) {
                     WebElement radio = lbl.findElement(By.cssSelector("input[type='radio']"));
                     if (!radio.isSelected())
-                        ((JavascriptExecutor)driver).executeScript("arguments[0].click();", radio);
+                        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", radio);
                     Thread.sleep(600);
                     break;
                 }
@@ -454,7 +508,7 @@ public class FlashScoreScraper2 {
                     "button.settings__closeButton",
                     "button.wcl-closeButton_6bc3P"}) {
                 try {
-                    ((JavascriptExecutor)driver).executeScript("arguments[0].click();",
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();",
                             driver.findElement(By.cssSelector(sel)));
                     closed = true;
                     break;
@@ -470,7 +524,8 @@ public class FlashScoreScraper2 {
 
     static void acceptCookiesIfPresent() {
         try {
-            WebElement cookieBtn = shortWait.until(ExpectedConditions.elementToBeClickable(By.id("onetrust-accept-btn-handler")));
+            WebElement cookieBtn = shortWait.until(
+                    ExpectedConditions.elementToBeClickable(By.id("onetrust-accept-btn-handler")));
             cookieBtn.click();
         } catch (Exception ignored) {}
     }
@@ -478,8 +533,9 @@ public class FlashScoreScraper2 {
     static void navigateToDay(int dayOffset) {
         for (int i = 0; i < dayOffset; i++) {
             try {
-                WebElement prev = wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector("[data-day-picker-arrow='prev']")));
-                ((JavascriptExecutor)driver).executeScript("arguments[0].click();", prev);
+                WebElement prev = wait.until(
+                        ExpectedConditions.elementToBeClickable(By.cssSelector("[data-day-picker-arrow='prev']")));
+                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", prev);
                 Thread.sleep(500);
             } catch (Exception e) {
                 System.out.println("  Geri ok hatasi: " + e.getMessage());
@@ -516,12 +572,11 @@ public class FlashScoreScraper2 {
     // EXCEL EXPORT (STATIC SÜTUNLARLA)
     // ══════════════════════════════════════════════════════════════════════════════
     static void exportToExcel(List<MatchData> data, String filename) throws IOException {
-        // STATIC_COLUMN_KEYS zaten sıralı olarak oluşturuldu, ek sıralama gerekmez
         Workbook wb = new XSSFWorkbook();
         Sheet sheet = wb.createSheet("Bet365 Odds");
 
-        CellStyle hStyle   = makeStyle(wb, IndexedColors.DARK_BLUE,  IndexedColors.WHITE, true);
-        CellStyle tStyle   = makeStyle(wb, IndexedColors.DARK_TEAL,  IndexedColors.WHITE, true);
+        CellStyle hStyle = makeStyle(wb, IndexedColors.DARK_BLUE, IndexedColors.WHITE, true);
+        CellStyle tStyle = makeStyle(wb, IndexedColors.DARK_TEAL, IndexedColors.WHITE, true);
         CellStyle altStyle = wb.createCellStyle();
         altStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
         altStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
@@ -530,23 +585,31 @@ public class FlashScoreScraper2 {
 
         // 1. satır: Grup başlıkları (tab + period)
         Row grpRow = sheet.createRow(0);
-        setCell(grpRow, 0, "Date/Time",hStyle); sheet.setColumnWidth(0, 18*256);
-        setCell(grpRow, 1, "Match ID", hStyle); sheet.setColumnWidth(1, 14*256);
-        setCell(grpRow, 2, "Country",  hStyle); sheet.setColumnWidth(2, 15*256);
-        setCell(grpRow, 3, "League",   hStyle); sheet.setColumnWidth(3, 25*256);
-        setCell(grpRow, 4, "Home",     hStyle); sheet.setColumnWidth(4, 20*256);
-        setCell(grpRow, 5, "Away",     hStyle); sheet.setColumnWidth(5, 20*256);
-        setCell(grpRow, 6, "FT Score", hStyle); sheet.setColumnWidth(6, 12*256);
-        setCell(grpRow, 7, "HT Score", hStyle); sheet.setColumnWidth(7, 12*256);
+        setCell(grpRow, 0, "Date/Time", hStyle);
+        sheet.setColumnWidth(0, 18 * 256);
+        setCell(grpRow, 1, "Match ID", hStyle);
+        sheet.setColumnWidth(1, 14 * 256);
+        setCell(grpRow, 2, "Country", hStyle);
+        sheet.setColumnWidth(2, 15 * 256);
+        setCell(grpRow, 3, "League", hStyle);
+        sheet.setColumnWidth(3, 25 * 256);
+        setCell(grpRow, 4, "Home", hStyle);
+        sheet.setColumnWidth(4, 20 * 256);
+        setCell(grpRow, 5, "Away", hStyle);
+        sheet.setColumnWidth(5, 20 * 256);
+        setCell(grpRow, 6, "FT Score", hStyle);
+        sheet.setColumnWidth(6, 12 * 256);
+        setCell(grpRow, 7, "HT Score", hStyle);
+        sheet.setColumnWidth(7, 12 * 256);
 
         String lastGrp = "";
         int grpStartCol = FIXED;
         for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
-            String key   = STATIC_COLUMN_KEYS.get(i);
-            String[] p   = key.split("\\|");
-            String grp   = p[0] + " | " + p[1];
-            int col      = FIXED + i;
-            sheet.setColumnWidth(col, 13*256);
+            String key = STATIC_COLUMN_KEYS.get(i);
+            String[] p = key.split("\\|");
+            String grp = p[0] + " | " + p[1];
+            int col = FIXED + i;
+            sheet.setColumnWidth(col, 13 * 256);
 
             if (!grp.equals(lastGrp)) {
                 if (!lastGrp.isEmpty() && grpStartCol < col - 1) {
@@ -566,12 +629,12 @@ public class FlashScoreScraper2 {
 
         // 2. satır: Etiketler (label)
         Row lblRow = sheet.createRow(1);
-        setCell(lblRow, 0, "Date/Time",hStyle);
+        setCell(lblRow, 0, "Date/Time", hStyle);
         setCell(lblRow, 1, "Match ID", hStyle);
-        setCell(lblRow, 2, "Country",  hStyle);
-        setCell(lblRow, 3, "League",   hStyle);
-        setCell(lblRow, 4, "Home",     hStyle);
-        setCell(lblRow, 5, "Away",     hStyle);
+        setCell(lblRow, 2, "Country", hStyle);
+        setCell(lblRow, 3, "League", hStyle);
+        setCell(lblRow, 4, "Home", hStyle);
+        setCell(lblRow, 5, "Away", hStyle);
         setCell(lblRow, 6, "FT Score", hStyle);
         setCell(lblRow, 7, "HT Score", hStyle);
         for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
@@ -582,17 +645,18 @@ public class FlashScoreScraper2 {
         // Veri satırları
         int rowNum = 2;
         for (MatchData md : data) {
-            Row row      = sheet.createRow(rowNum);
+            Row row = sheet.createRow(rowNum);
             CellStyle cs = (rowNum % 2 == 0) ? altStyle : null;
 
-            setCell(row, 0, md.matchDateTime != null && !md.matchDateTime.equals("-") ? md.matchDateTime : md.date, cs);
-            setCell(row, 1, md.matchId,  cs);
-            setCell(row, 2, md.country,  cs);
-            setCell(row, 3, md.league,   cs);
+            setCell(row, 0,
+                    md.matchDateTime != null && !md.matchDateTime.equals("-") ? md.matchDateTime : md.date, cs);
+            setCell(row, 1, md.matchId, cs);
+            setCell(row, 2, md.country, cs);
+            setCell(row, 3, md.league, cs);
             setCell(row, 4, md.homeTeam, cs);
             setCell(row, 5, md.awayTeam, cs);
-            setCell(row, 6, md.ftScore,  cs);
-            setCell(row, 7, md.htScore,  cs);
+            setCell(row, 6, md.ftScore, cs);
+            setCell(row, 7, md.htScore, cs);
 
             for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
                 String val = md.oddsMap.getOrDefault(STATIC_COLUMN_KEYS.get(i), "-");
