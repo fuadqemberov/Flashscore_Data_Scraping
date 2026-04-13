@@ -433,9 +433,24 @@ public class FlashScoreScraper {
         }
     }
 
-    static List<String[]> collectMatchIds() {
+    static List<String[]> collectMatchIds() throws InterruptedException {
+        Thread.sleep(2000);
         List<String[]> result = new ArrayList<>();
         result.add(new String[]{"WYNDZibL", "Crystal Palace", "Newcastle"});
+//        for (WebElement row : driver.findElements(
+//                By.cssSelector("div[id^='g_1_'].event__match"))) {
+//            try {
+//                String matchId = row.getAttribute("id").replace("g_1_","");
+//                String home="", away="";
+//                try { home = row.findElement(By.cssSelector(
+//                  ".event__homeParticipant [data-testid='wcl-scores-simple-text-01']"))
+//                  .getText().trim(); } catch (Exception ignored) {}
+//                try { away = row.findElement(By.cssSelector(
+//                  ".event__awayParticipant [data-testid='wcl-scores-simple-text-01']"))
+//                  .getText().trim(); } catch (Exception ignored) {}
+//                if (!matchId.isEmpty()) result.add(new String[]{matchId, home, away});
+//            } catch (Exception ignored) {}
+//        }
         return result;
     }
 
