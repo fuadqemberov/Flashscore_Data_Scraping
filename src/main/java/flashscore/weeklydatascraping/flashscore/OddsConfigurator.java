@@ -1,6 +1,15 @@
 package flashscore.weeklydatascraping.flashscore;
 
-import org.openqa.selenium.*;
+import org.openqa.selenium.By;
+import org.openqa.selenium.ElementClickInterceptedException;
+import org.openqa.selenium.ElementNotInteractableException;
+import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.Keys;
+import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.TimeoutException;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.FluentWait;
 import org.openqa.selenium.support.ui.Wait;
@@ -15,7 +24,7 @@ public class OddsConfigurator {
      * Kesinlikle başarılı olması gereken Decimal Odds ayarlama metodu.
      * Başarısız olursa exception fırlatır ve kodun devam etmesini ENGELLER.
      */
-    public static void configureDecimalOdds(WebDriver driver, WebDriverWait defaultWait) {
+    public static void configureDecimalOdds(WebDriver driver) {
         System.out.println("  [Settings] Decimal odds formati secilme islemi baslatiliyor...");
 
         int maxRetries = 3; // İşlemi 3 kere deneme hakkı
