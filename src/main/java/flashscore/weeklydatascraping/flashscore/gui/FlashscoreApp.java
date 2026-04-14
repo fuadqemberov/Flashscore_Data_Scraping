@@ -81,6 +81,11 @@ public class FlashscoreApp extends Application {
         Scene scene = new Scene(root, 550, 500);
         primaryStage.setScene(scene);
         primaryStage.setResizable(false);
+        primaryStage.setOnCloseRequest(event -> {
+            forceCleanupDrivers();
+            Platform.exit();
+            System.exit(0);
+        });
         primaryStage.show();
     }
 
@@ -146,10 +151,12 @@ public class FlashscoreApp extends Application {
                 ExcelReportService.generateReport(resultList, savePath);
 
                 AppLogger.log("İşlem başarıyla tamamlandı! Dosya: " + savePath);
+                forceCleanupDrivers();
                 finishTask("Tamamlandı!");
 
             } catch (Exception e) {
                 AppLogger.log("KRİTİK HATA: " + e.getMessage());
+                forceCleanupDrivers();
                 finishTask("Hata oluştu!");
             }
         });
@@ -220,5 +227,22 @@ public class FlashscoreApp extends Application {
             alert.setContentText(content);
             alert.showAndWait();
         });
+    }
+    private void forceCleanupDrivers() {
+        try {
+            AppLogger.log("Sistem kontrol ediliyor... Kapanmayan Driver'lar temizleniyor.");
+            String os = System.getProperty("os.name").toLowerCase();
+
+            if (os.contains("win")) {
+                // Windows için TaskKill komutu (/F zorla kapatır, /IM imaj adını seçer)
+                Runtime.getRuntime().exec("taskkill /F /IM chromedriver.exe /T");
+            } else if (os.contains("mac") || os.contains("nix") || os.contains("nux")) {
+                // Mac veya Linux için Kill komutu
+                Runtime.getRuntime().exec("pkill -f chromedriver");
+            }
+            AppLogger.log("Arka plan RAM temizliği başarıyla tamamlandı!");
+        } catch (Exception e) {
+            AppLogger.log("Temizlik sırasında bir hata oluştu: " + e.getMessage());
+        }
     }
 }
