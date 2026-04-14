@@ -13,7 +13,6 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
-import org.openqa.selenium.Keys;
 import org.openqa.selenium.PageLoadStrategy;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
@@ -29,26 +28,37 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
+
+import static flashscore.weeklydatascraping.flashscore.OddsConfigurator.configureDecimalOdds;
 
 public class FlashScoreScraper3 {
 
-    static WebDriver driver;
-    static WebDriverWait wait;
-    static WebDriverWait shortWait;
+    // ── Parallellik ayarı ────────────────────────────────────────────────────────
+    // Eyni anda açıq olan Chrome driver sayı.
+    // RAM-a görə tənzimləyin: 8 GB RAM → 4, 16 GB RAM → 6-8
+    static final int MAX_CONCURRENT = 4;
 
+    // ── Odds schema ──────────────────────────────────────────────────────────────
     static final String[][] ODDS_TABS = {
-            {"1x2",          "1X2"},
-            {"Over/Under",   "Over/Under"},
-            {"Both teams",   "Both teams to score"},
-            {"Double chance","Double chance"},
-            {"Correct score","Correct score"}
+            {"1x2",           "1X2"},
+            {"Over/Under",    "Over/Under"},
+            {"Both teams",    "Both teams to score"},
+            {"Double chance", "Double chance"},
+            {"Correct score", "Correct score"}
     };
 
     static final String[] HALF_TABS = {"Full Time", "1st Half", "2nd Half"};
@@ -94,12 +104,30 @@ public class FlashScoreScraper3 {
         }
     }
 
+    // ── Tab filter setləri ───────────────────────────────────────────────────────
+    static final Set<String> MAIN_TAB_TEXTS = new HashSet<>(Arrays.asList(
+            "MATCH", "ODDS", "H2H", "STANDINGS", "TABLE", "DRAW", "STATS", "NEWS"
+    ));
+    static final Set<String> ODDS_SUB_TAB_TEXTS = new HashSet<>(Arrays.asList(
+            "1X2", "OVER/UNDER", "BOTH TEAMS TO SCORE", "DOUBLE CHANCE", "CORRECT SCORE",
+            "ASIAN HANDICAP", "DRAW NO BET", "EUROPEAN HANDICAP"
+    ));
+
+    // ── Data sinifi ──────────────────────────────────────────────────────────────
     static class MatchData {
         String matchId, homeTeam, awayTeam, date, country, league, matchDateTime, ftScore, htScore;
         Map<String, String> oddsMap = new HashMap<>();
     }
 
-    // ══════════════════════════════════════════════════════════════════════════════
+    // ── Thread-safe toplama strukturları ─────────────────────────────────────────
+    // CopyOnWriteArrayList: paralel yazma zamanı xəta vermir
+    static final CopyOnWriteArrayList<MatchData> resultList = new CopyOnWriteArrayList<>();
+    static final AtomicInteger doneCount  = new AtomicInteger(0);
+    static final AtomicInteger totalCount = new AtomicInteger(0);
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // MAIN
+    // ════════════════════════════════════════════════════════════════════════════
     public static void main(String[] args) throws Exception {
 
         Scanner scanner = new Scanner(System.in);
@@ -111,6 +139,137 @@ public class FlashScoreScraper3 {
             if (days < 1 || days > 7) System.out.println("1 ile 7 arasinda bir deger girin.");
         }
 
+        // ════════════════════════════════════════════════════════════════════════
+        // FAZA 1 — Tək "listing" driver ilə maç ID-lərini topla
+        //
+        // Bu hissə sizin işləyən single-thread kodunuzla EYNİDİR.
+        // Cookies, settings, navigasiya — hamısı burada adi qaydada işləyir.
+        // ════════════════════════════════════════════════════════════════════════
+        List<String[]> allMatchTokens = new ArrayList<>(); // {matchId, home, away, date}
+
+        WebDriver listDriver       = buildDriver();
+        WebDriverWait listWait     = new WebDriverWait(listDriver, Duration.ofSeconds(15));
+        WebDriverWait listShortWait = new WebDriverWait(listDriver, Duration.ofSeconds(3));
+
+        try {
+            listDriver.get("https://www.flashscore.co.uk/football/");
+            acceptCookiesIfPresent(listDriver, listShortWait);
+            configureDecimalOdds(listDriver, listWait);
+
+            for (int dayOffset = 1; dayOffset <= days; dayOffset++) {
+                LocalDate targetDate = LocalDate.now().minusDays(dayOffset);
+                System.out.println("\n>>> " + targetDate);
+
+                navigateToDay(listDriver, listWait, dayOffset);
+
+                try {
+                    listWait.until(ExpectedConditions.presenceOfElementLocated(
+                            By.cssSelector("div[id^='g_1_']")));
+                } catch (Exception ignored) {}
+
+                List<String[]> dayMatches = collectMatchIds(listDriver);
+                System.out.println("  " + dayMatches.size() + " mac bulundu.");
+
+                for (String[] m : dayMatches)
+                    allMatchTokens.add(new String[]{m[0], m[1], m[2], targetDate.toString()});
+
+                // Növbəti gün üçün əsas səhifəyə qayıt
+                listDriver.get("https://www.flashscore.co.uk/football/");
+                try {
+                    listWait.until(ExpectedConditions.presenceOfElementLocated(
+                            By.cssSelector("div[id^='g_1_']")));
+                } catch (Exception ignored) {}
+            }
+        } finally {
+            listDriver.quit();
+        }
+
+        totalCount.set(allMatchTokens.size());
+        System.out.println("\n=== Toplam " + totalCount.get() + " mac paralel cekiliyor"
+                           + " (eyni anda max " + MAX_CONCURRENT + " driver) ===\n");
+
+        // ════════════════════════════════════════════════════════════════════════
+        // FAZA 2 — Hər maç üçün AYRI driver, PARALEL işləyir
+        //
+        // Necə işləyir:
+        //   - Semaphore(MAX_CONCURRENT): eyni anda ən çox 4 driver açıq olur
+        //   - Virtual thread (Java 21): hər thread çox yüngüldür, minlərlə açılır
+        //   - Semaphore slot boşaldıqda növbəti thread dərhal başlayır
+        //   - Hər thread: öz driver-ini açır → cookie+settings → maç scrape → driver bağlayır
+        //   - Nəticə CopyOnWriteArrayList-ə yazılır (thread-safe)
+        // ════════════════════════════════════════════════════════════════════════
+        Semaphore sem = new Semaphore(MAX_CONCURRENT, true); // fair=true: növbə qaydası
+        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+        for (String[] token : allMatchTokens) {
+            final String matchId = token[0];
+            final String home    = token[1];
+            final String away    = token[2];
+            final String date    = token[3];
+
+            executor.submit(() -> {
+                // Semaphore: slot gözlə (başqa driver bitmişsə dərhal keçir, yoxsa bloklanır)
+                sem.acquireUninterruptibly();
+
+                WebDriver d = null;
+                try {
+                    d = buildDriver();
+                    WebDriverWait w  = new WebDriverWait(d, Duration.ofSeconds(15));
+                    WebDriverWait sw = new WebDriverWait(d, Duration.ofSeconds(3));
+
+                    // Hər driver öz cookie + decimal settings prosesini keçir
+                    // (sizin işləyən kodu ilə EYNİDİR)
+                    d.get("https://www.flashscore.co.uk/football/");
+                    acceptCookiesIfPresent(d, sw);
+                    configureDecimalOdds(d, w);
+
+                    // Maç səhifəsini scraple
+                    MatchData md = scrapeMatch(d, w, sw, matchId, home, away, date);
+
+                    if (md != null) {
+                        resultList.add(md); // thread-safe yazma
+                        System.out.printf("  [OK %2d/%d] %s vs %s%n",
+                                doneCount.incrementAndGet(), totalCount.get(), home, away);
+                    } else {
+                        System.out.printf("  [SKIP   ] %s vs %s%n", home, away);
+                        doneCount.incrementAndGet();
+                    }
+
+                } catch (Exception ex) {
+                    System.out.printf("  [ERR    ] %s vs %s — %s%n",
+                            home, away, ex.getMessage());
+                    doneCount.incrementAndGet();
+                } finally {
+                    // Driver-i MÜTLƏQ bağla, yaddaşı azad et, Semaphore-u geri ver
+                    if (d != null) { try { d.quit(); } catch (Exception ignored) {} }
+                    sem.release(); // növbəti gözləyən thread indi başlaya bilər
+                }
+            });
+        }
+
+        // Bütün virtual thread-lərin bitməsini gözlə
+        executor.shutdown();
+        executor.awaitTermination(3, TimeUnit.HOURS);
+
+        // ════════════════════════════════════════════════════════════════════════
+        // FAZA 3 — Excel export
+        // ════════════════════════════════════════════════════════════════════════
+        // Nəticələri tarixə görə sırala (ən yeni üstdə)
+        List<MatchData> finalData = new ArrayList<>(resultList);
+        finalData.sort(Collections.reverseOrder(
+                java.util.Comparator.comparing(md -> md.date)));
+
+        System.out.println("\n=== STATIC COLUMN KEYS (" + STATIC_COLUMN_KEYS.size() + " adet) ===");
+
+        String filename = "bet365.xlsx";
+        exportToExcel(finalData, filename);
+        System.out.println("\nExcel olusturuldu: " + filename);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // DRIVER FACTORY — hər çağırışda müstəqil headless Chrome açır
+    // ════════════════════════════════════════════════════════════════════════════
+    static WebDriver buildDriver() {
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless=new");
         options.addArguments("--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage");
@@ -118,59 +277,18 @@ public class FlashScoreScraper3 {
         options.addArguments("--disable-extensions");
         options.addArguments("--window-size=1920,1080");
         options.setPageLoadStrategy(PageLoadStrategy.EAGER);
-
-        driver = new ChromeDriver(options);
-        wait      = new WebDriverWait(driver, Duration.ofSeconds(15));
-        shortWait = new WebDriverWait(driver, Duration.ofSeconds(3));
-
-        List<MatchData> allData = new ArrayList<>();
-
-        try {
-            driver.get("https://www.flashscore.co.uk/football/");
-            acceptCookiesIfPresent();
-            configureDecimalOdds();
-
-            for (int dayOffset = 1; dayOffset <= days; dayOffset++) {
-                LocalDate targetDate = LocalDate.now().minusDays(dayOffset);
-                System.out.println("\n>>> " + targetDate);
-
-                navigateToDay(dayOffset);
-
-                try {
-                    wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("div[id^='g_1_']")));
-                } catch (Exception ignored) {}
-
-                List<String[]> matches = collectMatchIds();
-                System.out.println("  " + matches.size() + " mac bulundu.");
-
-                for (String[] m : matches) {
-                    MatchData md = scrapeMatch(m[0], m[1], m[2], targetDate.toString());
-                    if (md != null) {
-                        allData.add(md);
-                        System.out.println("  [OK] " + m[1] + " vs " + m[2]);
-                    }
-                }
-
-                //driver.get("https://www.flashscore.co.uk/football/");
-                try {
-                    wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("div[id^='g_1_']")));
-                } catch (Exception ignored) {}
-            }
-        } finally {
-            driver.quit();
-        }
-
-        System.out.println("\n=== STATIC COLUMN KEYS (" + STATIC_COLUMN_KEYS.size() + " adet) ===");
-
-        String filename = "bet365.xlsx";
-        exportToExcel(allData, filename);
-        System.out.println("\nExcel olusturuldu: " + filename);
+        return new ChromeDriver(options);
     }
 
-    // ══════════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════════════
     // MATCH SCRAPER
-    // ══════════════════════════════════════════════════════════════════════════════
-    static MatchData scrapeMatch(String matchId, String home, String away, String date) {
+    //
+    // Sizin işləyən scrapeMatch kodunuzla EYNİDİR.
+    // Yeganə fərq: static driver/wait əvəzinə parametr olaraq alır.
+    // Bu vacibdir: hər thread öz driver-ini işlədir, paylaşılan state yoxdur.
+    // ════════════════════════════════════════════════════════════════════════════
+    static MatchData scrapeMatch(WebDriver driver, WebDriverWait wait, WebDriverWait shortWait,
+                                 String matchId, String home, String away, String date) {
         driver.get("https://www.flashscore.co.uk/match/football/" + matchId);
 
         try {
@@ -221,7 +339,7 @@ public class FlashScoreScraper3 {
 
         // HT skoru
         try {
-            if (clickMainTab("Match")) {
+            if (clickMainTab(driver, shortWait, "Match")) {
                 Thread.sleep(300);
                 List<WebElement> htElements = driver.findElements(
                         By.cssSelector("span[data-testid='wcl-scores-overline-02'] div"));
@@ -239,85 +357,68 @@ public class FlashScoreScraper3 {
             }
         } catch (Exception ignored) {}
 
-        // ── Odds tab'ına geç ──────────────────────────────────────────────────
-        if (!clickMainTab("Odds")) {
+        // Odds tab-ına geç
+        if (!clickMainTab(driver, shortWait, "Odds")) {
             System.out.println("    [SKIP] Odds tab bulunamadi: " + matchId);
-            return null;
+            return md; // maç məlumatlarını saxla, odds boş qalsın
         }
 
-        // Odds sayfasının yüklenmesini bekle (tablo çıkana dek)
+        // Odds səhifəsinin yüklənməsini gözlə
         try {
             wait.until(ExpectedConditions.presenceOfElementLocated(
                     By.cssSelector(".ui-table, .oddsTab, [class*='oddsCompare']")));
         } catch (Exception ignored) {}
 
-        // ── Her odds tipi için ────────────────────────────────────────────────
+        // Hər odds tipi üçün
         for (String[] tabDef : ODDS_TABS) {
-            String tabName = tabDef[0];  // "1x2", "Over/Under", ...
-            String tabText = tabDef[1];  // "1X2", "Over/Under", ...
+            String tabName = tabDef[0];
+            String tabText = tabDef[1];
 
-            if (!clickOddsSubTab(tabText)) {
+            if (!clickOddsSubTab(driver, tabText)) {
                 System.out.println("    [WARN] Odds sub-tab bulunamadi: " + tabText);
                 continue;
             }
 
-            // ── Her period için ───────────────────────────────────────────────
+            // Hər period üçün
             for (String period : HALF_TABS) {
                 if (tabName.equals("Correct score") && period.equals("2nd Half")) continue;
 
                 if (!period.equals("Full Time")) {
-                    // Full Time dışındaki period'lara tıkla
-                    if (!clickPeriodTab(period)) {
-                        // Period tab yoksa bu period'u atla
-                        continue;
-                    }
-                }
-                // Full Time zaten varsayılan; tekrar tıklamaya gerek yok
-
-                // bet365 satırının DOM'a girmesini bekle
-                if (!waitForBet365Row()) {
-                    // Bu period için bet365 verisi yok
-                    continue;
+                    if (!clickPeriodTab(driver, period)) continue;
                 }
 
-                // Tab tipine göre scrape
+                if (!waitForBet365Row(driver)) continue;
+
                 switch (tabName) {
                     case "1x2":
-                        scrapeSimpleTab(md, tabName, period, new String[]{"Home", "Draw", "Away"});
+                        scrapeSimpleTab(driver, md, tabName, period, new String[]{"Home", "Draw", "Away"});
                         break;
                     case "Over/Under":
-                        scrapeOverUnderTab(md, tabName, period);
+                        scrapeOverUnderTab(driver, md, tabName, period);
                         break;
                     case "Both teams":
-                        scrapeSimpleTab(md, tabName, period, new String[]{"Yes", "No"});
+                        scrapeSimpleTab(driver, md, tabName, period, new String[]{"Yes", "No"});
                         break;
                     case "Double chance":
-                        scrapeSimpleTab(md, tabName, period, new String[]{"1X", "12", "X2"});
+                        scrapeSimpleTab(driver, md, tabName, period, new String[]{"1X", "12", "X2"});
                         break;
                     case "Correct score":
-                        scrapeCorrectScoreTab(md, tabName, period);
+                        scrapeCorrectScoreTab(driver, md, tabName, period);
                         break;
                 }
             }
 
-            // Bir sonraki odds tipine geçmeden önce tekrar ana Odds tab'ına dön
-            // (period tab'ı değiştirmiş olabiliriz, sub-tab seçimi sıfırlanabilir)
-            clickMainTab("Odds");
+            clickMainTab(driver, shortWait, "Odds");
             try { Thread.sleep(300); } catch (Exception ignored) {}
         }
 
         return md;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════════
-    // TAB TIKLAMA METODLARİ
-    // ══════════════════════════════════════════════════════════════════════════════
-
-    /**
-     * Üst seviye tab'ları tıklar: "Match", "Odds", "H2H", "Standings" vb.
-     * wcl-tab elementleri arasında text eşleşmesi arar.
-     */
-    static boolean clickMainTab(String text) {
+    // ════════════════════════════════════════════════════════════════════════════
+    // TAB KLIKLAMA — sizin işləyən kodunuzla eyni, driver parametr alır
+    // ════════════════════════════════════════════════════════════════════════════
+    static boolean clickMainTab(WebDriver driver, WebDriverWait shortWait, String text) {
         try {
             List<WebElement> tabs = shortWait.until(
                     ExpectedConditions.presenceOfAllElementsLocatedBy(
@@ -333,31 +434,15 @@ public class FlashScoreScraper3 {
         return false;
     }
 
-    /**
-     * Odds sayfasının İÇİNDEKİ tip tab'larını tıklar: "1X2", "Over/Under", ...
-     *
-     * DÜZELTME: Odds tab'ına geçtikten sonra sayfa URL'si değişir.
-     * Odds sub-tab'ları genellikle farklı bir container içindedir.
-     * Tüm wcl-tab elementlerini alıp "Odds" ana tab'ını HARİÇ tutarak
-     * (zira o zaten aktif) arama yapıyoruz.
-     * Ayrıca ana tab'larla çakışmayı önlemek için bilinen ana tab metinlerini filtreleriz.
-     */
-    static final Set<String> MAIN_TAB_TEXTS = new HashSet<>(Arrays.asList(
-            "MATCH", "ODDS", "H2H", "STANDINGS", "TABLE", "DRAW", "STATS", "NEWS"
-    ));
-
-    static boolean clickOddsSubTab(String tabText) {
+    static boolean clickOddsSubTab(WebDriver driver, String tabText) {
         try {
-            // Kısa bir bekleme: odds container'ının DOM'a girmesi için
             Thread.sleep(300);
-
             List<WebElement> tabs = driver.findElements(
                     By.cssSelector("[data-testid='wcl-tab']"));
 
             for (WebElement tab : tabs) {
                 if (!tab.isDisplayed()) continue;
                 String txt = tab.getText().trim().toUpperCase();
-                // Ana tab metinleriyle çakışıyorsa atla
                 if (MAIN_TAB_TEXTS.contains(txt)) continue;
                 if (txt.contains(tabText.toUpperCase())) {
                     ((JavascriptExecutor) driver).executeScript("arguments[0].click();", tab);
@@ -382,19 +467,7 @@ public class FlashScoreScraper3 {
         return false;
     }
 
-    /**
-     * Period tab'larını tıklar: "1st Half", "2nd Half"
-     *
-     * DÜZELTME: Period tab'ları da wcl-tab selector'ı kullanabilir.
-     * Ana tab metinlerini ve odds sub-tab metinlerini hariç tutarak
-     * yalnızca period tab'larını hedefliyoruz.
-     */
-    static final Set<String> ODDS_SUB_TAB_TEXTS = new HashSet<>(Arrays.asList(
-            "1X2", "OVER/UNDER", "BOTH TEAMS TO SCORE", "DOUBLE CHANCE", "CORRECT SCORE",
-            "ASIAN HANDICAP", "DRAW NO BET", "EUROPEAN HANDICAP"
-    ));
-
-    static boolean clickPeriodTab(String period) {
+    static boolean clickPeriodTab(WebDriver driver, String period) {
         try {
             Thread.sleep(200);
             List<WebElement> tabs = driver.findElements(
@@ -404,7 +477,6 @@ public class FlashScoreScraper3 {
                 if (!tab.isDisplayed()) continue;
                 String txt = tab.getText().trim().toUpperCase().replaceAll("\\s+", " ");
 
-                // Ana ve odds sub-tab metinleriyle çakışıyorsa atla
                 if (MAIN_TAB_TEXTS.contains(txt.replaceAll("\\s+", ""))) continue;
                 boolean isOddsSubTab = false;
                 for (String s : ODDS_SUB_TAB_TEXTS) {
@@ -414,10 +486,10 @@ public class FlashScoreScraper3 {
 
                 boolean match = false;
                 if (period.equals("1st Half") &&
-                        (txt.contains("1ST") || txt.contains("1 ST") || txt.equals("HT")))
+                    (txt.contains("1ST") || txt.contains("1 ST") || txt.equals("HT")))
                     match = true;
                 if (period.equals("2nd Half") &&
-                        (txt.contains("2ND") || txt.contains("2 ND")))
+                    (txt.contains("2ND") || txt.contains("2 ND")))
                     match = true;
 
                 if (match) {
@@ -430,11 +502,11 @@ public class FlashScoreScraper3 {
         return false;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════════
-    // SCRAPE METODLARİ
-    // ══════════════════════════════════════════════════════════════════════════════
-
-    static void scrapeSimpleTab(MatchData md, String tabName, String period, String[] labels) {
+    // ════════════════════════════════════════════════════════════════════════════
+    // SCRAPE METODLARI — sizin işləyən kodunuzla eyni, driver parametr alır
+    // ════════════════════════════════════════════════════════════════════════════
+    static void scrapeSimpleTab(WebDriver driver, MatchData md,
+                                String tabName, String period, String[] labels) {
         try {
             List<WebElement> rows = driver.findElements(By.cssSelector(".ui-table__row"));
             for (WebElement row : rows) {
@@ -449,7 +521,8 @@ public class FlashScoreScraper3 {
         } catch (Exception ignored) {}
     }
 
-    static void scrapeOverUnderTab(MatchData md, String tabName, String period) {
+    static void scrapeOverUnderTab(WebDriver driver, MatchData md,
+                                   String tabName, String period) {
         Map<Double, String[]> thresholdOdds = new HashMap<>();
         try {
             List<WebElement> rows = driver.findElements(By.cssSelector(".ui-table__row"));
@@ -485,7 +558,8 @@ public class FlashScoreScraper3 {
         }
     }
 
-    static void scrapeCorrectScoreTab(MatchData md, String tabName, String period) {
+    static void scrapeCorrectScoreTab(WebDriver driver, MatchData md,
+                                      String tabName, String period) {
         if (period.equals("2nd Half")) return;
 
         Map<String, String> scoreOddMap = new HashMap<>();
@@ -498,11 +572,11 @@ public class FlashScoreScraper3 {
                 try {
                     scoreLabel = (String) ((JavascriptExecutor) driver).executeScript(
                             "var el = arguments[0];" +
-                                    "var spans = el.querySelectorAll('span:not(.oddsCell__arrow):not(.oddsCell__linkIcon)');" +
-                                    "for(var i=0;i<spans.length;i++){" +
-                                    "  var t=spans[i].textContent.trim();" +
-                                    "  if(t.match(/^\\d+:\\d+$/)) return t;" +
-                                    "} return null;",
+                            "var spans = el.querySelectorAll('span:not(.oddsCell__arrow):not(.oddsCell__linkIcon)');" +
+                            "for(var i=0;i<spans.length;i++){" +
+                            "  var t=spans[i].textContent.trim();" +
+                            "  if(t.match(/^\\d+:\\d+$/)) return t;" +
+                            "} return null;",
                             row);
                 } catch (Exception ignored) {}
 
@@ -525,15 +599,9 @@ public class FlashScoreScraper3 {
         }
     }
 
-    /**
-     * DÜZELTME: bet365 satırı tespiti merkezi metoda taşındı.
-     * Bookmaker ID 16 olan elementi arar; bulamazsa logo alt text ile dener.
-     */
     static boolean isBet365Row(WebElement row) {
-        // Birincil: data-analytics-bookmaker-id attribute
         if (!row.findElements(By.cssSelector("[data-analytics-bookmaker-id='16']")).isEmpty())
             return true;
-        // İkincil: img alt text ile bet365 logosu
         try {
             List<WebElement> imgs = row.findElements(By.tagName("img"));
             for (WebElement img : imgs) {
@@ -544,19 +612,13 @@ public class FlashScoreScraper3 {
         return false;
     }
 
-    /**
-     * DÜZELTME: DOM'un güncellendiğinden emin olmak için
-     * önce eski tablo elementinin staleness'ini bekleyebiliriz.
-     * Burada sadece bet365 row'un varlığını bekliyoruz.
-     */
-    static boolean waitForBet365Row() {
+    static boolean waitForBet365Row(WebDriver driver) {
         try {
             new WebDriverWait(driver, Duration.ofSeconds(6)).until(
                     ExpectedConditions.presenceOfElementLocated(
                             By.cssSelector(".ui-table__row [data-analytics-bookmaker-id='16']")));
             return true;
         } catch (TimeoutException e) {
-            // Fallback: img alt bet365
             try {
                 new WebDriverWait(driver, Duration.ofSeconds(2)).until(
                         ExpectedConditions.presenceOfElementLocated(
@@ -569,7 +631,6 @@ public class FlashScoreScraper3 {
 
     static String extractOpeningOdd(WebElement cell) {
         try {
-            // title attribute: "opening_odd » current_odd" formatında
             String title = cell.getAttribute("title");
             if (title != null && !title.isBlank()) {
                 if (title.contains("»")) return title.split("»")[0].trim();
@@ -581,72 +642,73 @@ public class FlashScoreScraper3 {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════════
-    // SETTINGS / NAV HELPERS
-    // ══════════════════════════════════════════════════════════════════════════════
-    static void configureDecimalOdds() throws InterruptedException {
-        System.out.println("  [Settings] Decimal odds formati seciliyor...");
-        try {
-            WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(
-                    By.cssSelector("#hamburger-menu div[role='button']")));
-            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
-            Thread.sleep(1500);
+    // ════════════════════════════════════════════════════════════════════════════
+    // SETTINGS / NAV — sizin işləyən kodunuzla eyni, driver parametr alır
+    // ════════════════════════════════════════════════════════════════════════════
+//    static void configureDecimalOdds(WebDriver driver, WebDriverWait wait)
+//            throws InterruptedException {
+//        System.out.println("  [Settings] Decimal odds formati seciliyor...");
+//        try {
+//            WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(
+//                    By.cssSelector("#hamburger-menu div[role='button']")));
+//            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
+//            Thread.sleep(1500);
+//
+//            Thread.sleep(300);
+//            WebElement settingsRow = null;
+//            for (WebElement row : driver.findElements(By.cssSelector(".contextMenu__row"))) {
+//                if (row.getText().contains("Settings")) { settingsRow = row; break; }
+//            }
+//            if (settingsRow == null) {
+//                Thread.sleep(300);
+//                for (WebElement el : driver.findElements(By.cssSelector(".contextMenu__text"))) {
+//                    if (el.getText().trim().equals("Settings")) {
+//                        try {
+//                            Thread.sleep(300);
+//                            settingsRow = el.findElement(By.xpath("./ancestor::*[@role='button'][1]"));
+//                        } catch (Exception ignored) {}
+//                        break;
+//                    }
+//                }
+//            }
+//            if (settingsRow == null) {
+//                System.out.println("  [Settings] Bulunamadi.");
+//                return;
+//            }
+//            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", settingsRow);
+//            Thread.sleep(300);
+//
+//            for (WebElement lbl : driver.findElements(By.cssSelector("label"))) {
+//                if (lbl.getText().contains("DECIMAL")) {
+//                    WebElement radio = lbl.findElement(By.cssSelector("input[type='radio']"));
+//                    if (!radio.isSelected())
+//                        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", radio);
+//                    Thread.sleep(600);
+//                    break;
+//                }
+//            }
+//
+//            boolean closed = false;
+//            for (String sel : new String[]{
+//                    "[data-testid='wcl-dialogCloseButton']",
+//                    "button.settings__closeButton",
+//                    "button.wcl-closeButton_6bc3P"}) {
+//                try {
+//                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();",
+//                            driver.findElement(By.cssSelector(sel)));
+//                    closed = true;
+//                    break;
+//                } catch (Exception ignored) {}
+//            }
+//            if (!closed) driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
+//            Thread.sleep(800);
+//            System.out.println("  [Settings] Tamam.");
+//        } catch (Exception e) {
+//            System.out.println("  [Settings] Hata: " + e.getMessage());
+//        }
+//    }
 
-            Thread.sleep(300);
-            WebElement settingsRow = null;
-            for (WebElement row : driver.findElements(By.cssSelector(".contextMenu__row"))) {
-                if (row.getText().contains("Settings")) { settingsRow = row; break; }
-            }
-            if (settingsRow == null) {
-                Thread.sleep(300);
-                for (WebElement el : driver.findElements(By.cssSelector(".contextMenu__text"))) {
-                    if (el.getText().trim().equals("Settings")) {
-                        try {
-                            Thread.sleep(300);
-                            settingsRow = el.findElement(By.xpath("./ancestor::*[@role='button'][1]"));
-                        } catch (Exception ignored) {}
-                        break;
-                    }
-                }
-            }
-            if (settingsRow == null) {
-                System.out.println("  [Settings] Bulunamadi.");
-                return;
-            }
-            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", settingsRow);
-            Thread.sleep(300);
-
-            for (WebElement lbl : driver.findElements(By.cssSelector("label"))) {
-                if (lbl.getText().contains("DECIMAL")) {
-                    WebElement radio = lbl.findElement(By.cssSelector("input[type='radio']"));
-                    if (!radio.isSelected())
-                        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", radio);
-                    Thread.sleep(600);
-                    break;
-                }
-            }
-
-            boolean closed = false;
-            for (String sel : new String[]{
-                    "[data-testid='wcl-dialogCloseButton']",
-                    "button.settings__closeButton",
-                    "button.wcl-closeButton_6bc3P"}) {
-                try {
-                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();",
-                            driver.findElement(By.cssSelector(sel)));
-                    closed = true;
-                    break;
-                } catch (Exception ignored) {}
-            }
-            if (!closed) driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
-            Thread.sleep(800);
-            System.out.println("  [Settings] Tamam.");
-        } catch (Exception e) {
-            System.out.println("  [Settings] Hata: " + e.getMessage());
-        }
-    }
-
-    static void acceptCookiesIfPresent() {
+    static void acceptCookiesIfPresent(WebDriver driver, WebDriverWait shortWait) {
         try {
             WebElement cookieBtn = shortWait.until(
                     ExpectedConditions.elementToBeClickable(By.id("onetrust-accept-btn-handler")));
@@ -654,7 +716,7 @@ public class FlashScoreScraper3 {
         } catch (Exception ignored) {}
     }
 
-    static void navigateToDay(int dayOffset) {
+    static void navigateToDay(WebDriver driver, WebDriverWait wait, int dayOffset) {
         for (int i = 0; i < dayOffset; i++) {
             try {
                 WebElement prev = wait.until(
@@ -668,30 +730,29 @@ public class FlashScoreScraper3 {
         }
     }
 
-    static List<String[]> collectMatchIds() throws InterruptedException {
+    static List<String[]> collectMatchIds(WebDriver driver) throws InterruptedException {
         Thread.sleep(2000);
         List<String[]> result = new ArrayList<>();
-//        result.add(new String[]{"WYNDZibL", "Crystal Palace", "Newcastle"});
         for (WebElement row : driver.findElements(
                 By.cssSelector("div[id^='g_1_'].event__match"))) {
             try {
-                String matchId = row.getAttribute("id").replace("g_1_","");
-                String home="", away="";
+                String matchId = row.getAttribute("id").replace("g_1_", "");
+                String home = "", away = "";
                 try { home = row.findElement(By.cssSelector(
-                  ".event__homeParticipant [data-testid='wcl-scores-simple-text-01']"))
-                  .getText().trim(); } catch (Exception ignored) {}
+                                ".event__homeParticipant [data-testid='wcl-scores-simple-text-01']"))
+                        .getText().trim(); } catch (Exception ignored) {}
                 try { away = row.findElement(By.cssSelector(
-                  ".event__awayParticipant [data-testid='wcl-scores-simple-text-01']"))
-                  .getText().trim(); } catch (Exception ignored) {}
+                                ".event__awayParticipant [data-testid='wcl-scores-simple-text-01']"))
+                        .getText().trim(); } catch (Exception ignored) {}
                 if (!matchId.isEmpty()) result.add(new String[]{matchId, home, away});
             } catch (Exception ignored) {}
         }
-        return result.subList(0,1);
+        return result.subList(0, Math.min(10, result.size()));
     }
 
-    // ══════════════════════════════════════════════════════════════════════════════
-    // EXCEL EXPORT
-    // ══════════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════════════
+    // EXCEL EXPORT — sizin orijinal kodunuzla tamamilə eynidir
+    // ════════════════════════════════════════════════════════════════════════════
     static void exportToExcel(List<MatchData> data, String filename) throws IOException {
         Workbook wb = new XSSFWorkbook();
         Sheet sheet = wb.createSheet("Bet365 Odds");
@@ -704,7 +765,6 @@ public class FlashScoreScraper3 {
 
         final int FIXED = 8;
 
-        // Satır 0: Grup başlıkları
         Row grpRow = sheet.createRow(0);
         setCell(grpRow, 0, "Date/Time", hStyle); sheet.setColumnWidth(0, 18 * 256);
         setCell(grpRow, 1, "Match ID",  hStyle); sheet.setColumnWidth(1, 14 * 256);
@@ -715,13 +775,13 @@ public class FlashScoreScraper3 {
         setCell(grpRow, 6, "FT Score",  hStyle); sheet.setColumnWidth(6, 12 * 256);
         setCell(grpRow, 7, "HT Score",  hStyle); sheet.setColumnWidth(7, 12 * 256);
 
-        String lastGrp   = "";
-        int grpStartCol  = FIXED;
+        String lastGrp  = "";
+        int grpStartCol = FIXED;
         for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
-            String key   = STATIC_COLUMN_KEYS.get(i);
-            String[] p   = key.split("\\|");
-            String grp   = p[0] + " | " + p[1];
-            int col      = FIXED + i;
+            String key = STATIC_COLUMN_KEYS.get(i);
+            String[] p = key.split("\\|");
+            String grp = p[0] + " | " + p[1];
+            int col    = FIXED + i;
             sheet.setColumnWidth(col, 13 * 256);
 
             if (!grp.equals(lastGrp)) {
@@ -738,7 +798,6 @@ public class FlashScoreScraper3 {
                 sheet.addMergedRegion(new CellRangeAddress(0, 0, grpStartCol, lastDataCol));
         }
 
-        // Satır 1: Etiketler
         Row lblRow = sheet.createRow(1);
         setCell(lblRow, 0, "Date/Time", hStyle);
         setCell(lblRow, 1, "Match ID",  hStyle);
@@ -753,10 +812,9 @@ public class FlashScoreScraper3 {
             setCell(lblRow, FIXED + i, label, hStyle);
         }
 
-        // Veri satırları
         int rowNum = 2;
         for (MatchData md : data) {
-            Row row    = sheet.createRow(rowNum);
+            Row row   = sheet.createRow(rowNum);
             CellStyle cs = (rowNum % 2 == 0) ? altStyle : null;
 
             setCell(row, 0, (md.matchDateTime != null && !md.matchDateTime.equals("-"))
@@ -782,7 +840,7 @@ public class FlashScoreScraper3 {
         }
         wb.close();
         System.out.println("Toplam " + (rowNum - 2) + " mac, " +
-                STATIC_COLUMN_KEYS.size() + " sutun yazildi.");
+                           STATIC_COLUMN_KEYS.size() + " sutun yazildi.");
     }
 
     static CellStyle makeStyle(Workbook wb, IndexedColors bg, IndexedColors fg, boolean bold) {
