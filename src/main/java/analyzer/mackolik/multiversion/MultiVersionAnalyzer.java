@@ -27,7 +27,7 @@ public class MultiVersionAnalyzer {
     private static final Logger log = LoggerFactory.getLogger(MultiVersionAnalyzer.class);
     private static final int START_YEAR = 2024;
     private static final int END_YEAR = 2010;
-    private static final int[] ANALYSIS_VERSIONS = {1, 2, 3, 4}; // 1,2,3,4 maç öncesi versiyonları
+    private static final int[] ANALYSIS_VERSIONS = {1, 2, 3, 4};
 
     // =============================================
     // İç sınıf: Takım analiz görevini yapan callable
