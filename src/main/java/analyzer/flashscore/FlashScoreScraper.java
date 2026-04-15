@@ -642,71 +642,6 @@ public class FlashScoreScraper {
         }
     }
 
-    // ════════════════════════════════════════════════════════════════════════════
-    // SETTINGS / NAV — sizin işləyən kodunuzla eyni, driver parametr alır
-    // ════════════════════════════════════════════════════════════════════════════
-//    static void configureDecimalOdds(WebDriver driver, WebDriverWait wait)
-//            throws InterruptedException {
-//        System.out.println("  [Settings] Decimal odds formati seciliyor...");
-//        try {
-//            WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(
-//                    By.cssSelector("#hamburger-menu div[role='button']")));
-//            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
-//            Thread.sleep(1500);
-//
-//            Thread.sleep(300);
-//            WebElement settingsRow = null;
-//            for (WebElement row : driver.findElements(By.cssSelector(".contextMenu__row"))) {
-//                if (row.getText().contains("Settings")) { settingsRow = row; break; }
-//            }
-//            if (settingsRow == null) {
-//                Thread.sleep(300);
-//                for (WebElement el : driver.findElements(By.cssSelector(".contextMenu__text"))) {
-//                    if (el.getText().trim().equals("Settings")) {
-//                        try {
-//                            Thread.sleep(300);
-//                            settingsRow = el.findElement(By.xpath("./ancestor::*[@role='button'][1]"));
-//                        } catch (Exception ignored) {}
-//                        break;
-//                    }
-//                }
-//            }
-//            if (settingsRow == null) {
-//                System.out.println("  [Settings] Bulunamadi.");
-//                return;
-//            }
-//            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", settingsRow);
-//            Thread.sleep(300);
-//
-//            for (WebElement lbl : driver.findElements(By.cssSelector("label"))) {
-//                if (lbl.getText().contains("DECIMAL")) {
-//                    WebElement radio = lbl.findElement(By.cssSelector("input[type='radio']"));
-//                    if (!radio.isSelected())
-//                        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", radio);
-//                    Thread.sleep(600);
-//                    break;
-//                }
-//            }
-//
-//            boolean closed = false;
-//            for (String sel : new String[]{
-//                    "[data-testid='wcl-dialogCloseButton']",
-//                    "button.settings__closeButton",
-//                    "button.wcl-closeButton_6bc3P"}) {
-//                try {
-//                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();",
-//                            driver.findElement(By.cssSelector(sel)));
-//                    closed = true;
-//                    break;
-//                } catch (Exception ignored) {}
-//            }
-//            if (!closed) driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
-//            Thread.sleep(800);
-//            System.out.println("  [Settings] Tamam.");
-//        } catch (Exception e) {
-//            System.out.println("  [Settings] Hata: " + e.getMessage());
-//        }
-//    }
 
     static void acceptCookiesIfPresent(WebDriver driver, WebDriverWait shortWait) {
         try {
@@ -733,26 +668,25 @@ public class FlashScoreScraper {
     static List<String[]> collectMatchIds(WebDriver driver) throws InterruptedException {
         Thread.sleep(2000);
         List<String[]> result = new ArrayList<>();
-        for (WebElement row : driver.findElements(
-                By.cssSelector("div[id^='g_1_'].event__match"))) {
-            try {
-                String matchId = row.getAttribute("id").replace("g_1_", "");
-                String home = "", away = "";
-                try { home = row.findElement(By.cssSelector(
-                                ".event__homeParticipant [data-testid='wcl-scores-simple-text-01']"))
-                        .getText().trim(); } catch (Exception ignored) {}
-                try { away = row.findElement(By.cssSelector(
-                                ".event__awayParticipant [data-testid='wcl-scores-simple-text-01']"))
-                        .getText().trim(); } catch (Exception ignored) {}
-                if (!matchId.isEmpty()) result.add(new String[]{matchId, home, away});
-            } catch (Exception ignored) {}
-        }
-        return result.subList(0, Math.min(10, result.size()));
+        result.add(new String[]{"vesvtKRN","Home","Away"});
+//
+//        for (WebElement row : driver.findElements(
+//                By.cssSelector("div[id^='g_1_'].event__match"))) {
+//            try {
+//                String matchId = row.getAttribute("id").replace("g_1_", "");
+//                String home = "", away = "";
+//                try { home = row.findElement(By.cssSelector(
+//                                ".event__homeParticipant [data-testid='wcl-scores-simple-text-01']"))
+//                        .getText().trim(); } catch (Exception ignored) {}
+//                try { away = row.findElement(By.cssSelector(
+//                                ".event__awayParticipant [data-testid='wcl-scores-simple-text-01']"))
+//                        .getText().trim(); } catch (Exception ignored) {}
+//                if (!matchId.isEmpty()) result.add(new String[]{matchId, home, away});
+//            } catch (Exception ignored) {}
+//        }
+        return result;
     }
 
-    // ════════════════════════════════════════════════════════════════════════════
-    // EXCEL EXPORT — sizin orijinal kodunuzla tamamilə eynidir
-    // ════════════════════════════════════════════════════════════════════════════
     static void exportToExcel(List<MatchData> data, String filename) throws IOException {
         Workbook wb = new XSSFWorkbook();
         Sheet sheet = wb.createSheet("Bet365 Odds");
