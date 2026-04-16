@@ -18,10 +18,19 @@ public class DriverFactory {
         options.addArguments("--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage");
         options.addArguments("--blink-settings=imagesEnabled=false");
         options.addArguments("--disable-extensions");
-        options.addArguments("--disable-logging"); // Tarayıcı loglarını kapat
-        options.addArguments("--log-level=3");     // Sadece fatal hataları göster
+        options.addArguments("--disable-logging");
+        options.addArguments("--log-level=3");
         options.addArguments("--window-size=1920,1080");
-        options.setPageLoadStrategy(PageLoadStrategy.EAGER);
+
+        // YENİ EKLENEN ANTİ-BOT AYARLARI
+        options.addArguments("--disable-blink-features=AutomationControlled");
+        options.setExperimentalOption("excludeSwitches", java.util.Collections.singletonList("enable-automation"));
+        options.setExperimentalOption("useAutomationExtension", false);
+        options.addArguments("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+        // EAGER YERİNE NORMAL YAPTIK (JS'nin tamamen yüklenmesini bekleyecek)
+        options.setPageLoadStrategy(PageLoadStrategy.NORMAL);
+
         return new ChromeDriver(options);
     }
 }

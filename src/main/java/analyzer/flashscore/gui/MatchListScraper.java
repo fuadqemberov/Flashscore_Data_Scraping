@@ -59,6 +59,6 @@ public class MatchListScraper {
         }
 
         // İlk 10 maçı almak için ayarlanmış. Sınırı kaldırmak istersen "return result;" yapabilirsin.
-        return result;
+        return result.subList(0,10);
     }
 }

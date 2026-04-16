@@ -18,44 +18,54 @@ public class MatchDetailScraper {
     // =====================================================================
 
     public static void scrapeMatch(WebDriver driver, MatchData md) {
-        driver.get(ScraperConstants.MATCH_URL_PREFIX + md.matchId);
+        int maxRetries = 3; // 3 defa deneme hakkı
+        boolean success = false;
 
-        try {
-            // Sayfanın ana iskeletinin yüklenmesini bekle
-            WaitActionUtils.getSmartWait(driver, 10).until(
-                    ExpectedConditions.presenceOfElementLocated(
-                            By.cssSelector(".duelParticipant")));
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                driver.get(ScraperConstants.MATCH_URL_PREFIX + md.matchId);
 
-            // Network trafiğinin sakinleşmesini bekle (Sayfa tam yüklensin)
-            WaitActionUtils.waitForNetworkIdle(driver);
+                // YENİ EKLENDİ: Bekleme süresini 10'dan 20 saniyeye çıkardık.
+                WaitActionUtils.getSmartWait(driver, 20).until(
+                        ExpectedConditions.presenceOfElementLocated(
+                                By.cssSelector(".duelParticipant")));
 
-            // Temel bilgileri (Skor, Tarih, Lig) çek
-            extractBasicInfo(driver, md);
+                // Network trafiğinin sakinleşmesini bekle
+                WaitActionUtils.waitForNetworkIdle(driver);
 
-            // HT skorunu çekmek için Match veya Summary tabına tıkla
-            clickMatchOrSummaryTab(driver);
+                // Temel bilgileri (Skor, Tarih, Lig) çek
+                extractBasicInfo(driver, md);
 
-            // Tıkladıktan sonra tabın yüklenmesi için ufak bir esneme payı
-            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
-            extractHtScore(driver, md);
+                // HT skorunu çekmek için Match veya Summary tabına tıkla
+                clickMatchOrSummaryTab(driver);
 
-            // ODDS tabına keç
-            if (!clickMainTab(driver, "ODDS")) {
-                System.out.println("    [SKIP] Odds tab bulunamadi: " + md.matchId);
-                return;
+                try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                extractHtScore(driver, md);
+
+                // ODDS tabına keç
+                if (!clickMainTab(driver, "ODDS")) {
+                    System.out.println("    [SKIP] Odds tab bulunamadi: " + md.matchId);
+                    break; // Odds yoksa diğer denemeye gerek yok
+                }
+                WaitActionUtils.waitForNetworkIdle(driver);
+
+                if (!hasBet365OnScreen(driver)) {
+                    System.out.println("    [SKIP] Bet365 bu macda yoxdur: " + md.matchId);
+                    break;
+                }
+
+                scrapeAllOdds(driver, md);
+                success = true; // Her şey yolunda bitti
+                break; // Başarılı olduğu için For döngüsünden çık
+
+            } catch (Exception e) {
+                if (attempt < maxRetries) {
+                    System.out.println("    [RETRY] " + md.matchId + " yuklenemedi. Tekrar deneniyor... (" + attempt + "/" + maxRetries + ")");
+                    try { Thread.sleep(2000); } catch (InterruptedException ignored) {} // 2 saniye nefes al
+                } else {
+                    System.out.println("    [SKIP] Mac sayfasi hatasi (3 deneme basarisiz): " + md.matchId + " -> " + e.getMessage());
+                }
             }
-            WaitActionUtils.waitForNetworkIdle(driver);
-
-            // ── İLK GÖRÜNƏN ODDS SƏHİFƏSİNDƏ BET365 YOXLAMA ────────────
-            if (!hasBet365OnScreen(driver)) {
-                System.out.println("    [SKIP] Bet365 bu macda yoxdur, odds atlaniyor: " + md.matchId);
-                return;
-            }
-
-            scrapeAllOdds(driver, md);
-
-        } catch (Exception e) {
-            System.out.println("    [SKIP] Mac sayfasi hatasi: " + md.matchId + " -> " + e.getMessage());
         }
     }
 

@@ -277,6 +277,10 @@ public class FlashscoreApp extends Application {
                     sem.acquireUninterruptibly();
                     WebDriver driver = null;
                     try {
+                        // YENİ EKLENDİ: Her thread başlamadan önce 1 ile 3.5 saniye arası rastgele beklesin.
+                        // Bu sayede 4 browser aynı milisaniyede siteye saldırmaz, IP engeli yemezsiniz.
+                        Thread.sleep((long) (Math.random() * 2500 + 1000));
+
                         driver = DriverFactory.createHeadlessDriver();
                         driver.get(ScraperConstants.BASE_URL);
                         WaitActionUtils.smartClick(driver, By.id("onetrust-accept-btn-handler"), 3);
