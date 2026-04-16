@@ -21,17 +21,23 @@ public class MatchDetailScraper {
         driver.get(ScraperConstants.MATCH_URL_PREFIX + md.matchId);
 
         try {
+            // Sayfanın ana iskeletinin yüklenmesini bekle
             WaitActionUtils.getSmartWait(driver, 10).until(
                     ExpectedConditions.presenceOfElementLocated(
                             By.cssSelector(".duelParticipant")));
 
+            // Network trafiğinin sakinleşmesini bekle (Sayfa tam yüklensin)
+            WaitActionUtils.waitForNetworkIdle(driver);
+
+            // Temel bilgileri (Skor, Tarih, Lig) çek
             extractBasicInfo(driver, md);
 
-            if (clickMatchOrSummaryTab(driver)) {
-                extractHtScore(driver, md);
-            } else {
-                extractHtScore(driver, md);
-            }
+            // HT skorunu çekmek için Match veya Summary tabına tıkla
+            clickMatchOrSummaryTab(driver);
+
+            // Tıkladıktan sonra tabın yüklenmesi için ufak bir esneme payı
+            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            extractHtScore(driver, md);
 
             // ODDS tabına keç
             if (!clickMainTab(driver, "ODDS")) {
@@ -41,9 +47,6 @@ public class MatchDetailScraper {
             WaitActionUtils.waitForNetworkIdle(driver);
 
             // ── İLK GÖRÜNƏN ODDS SƏHİFƏSİNDƏ BET365 YOXLAMA ────────────
-            // ODDS tabına girən kimi ilk açılan sub-tab-da (1x2 Full Time)
-            // Bet365 yoxdursa → bütün odds scraping-i atla, növbəti maça keç.
-            // Bu yoxlama üçün əlavə tab tıklamaq lazım deyil.
             if (!hasBet365OnScreen(driver)) {
                 System.out.println("    [SKIP] Bet365 bu macda yoxdur, odds atlaniyor: " + md.matchId);
                 return;
@@ -60,11 +63,6 @@ public class MatchDetailScraper {
     // İlk açılan odds səhifəsində Bet365 var mı? (sürətli yoxlama)
     // =====================================================================
 
-    /**
-     * ODDS tabı açıldıqdan sonra ekranda Bet365 sətri axtarır.
-     * 4 saniyə gözləyir — yoxdursa false qaytarır, istisna atmır.
-     * false → scrapeAllOdds çağırılmır, bütün sub-tablar atlanır.
-     */
     private static boolean hasBet365OnScreen(WebDriver driver) {
         try {
             WaitActionUtils.getSmartWait(driver, 4).until(
@@ -79,7 +77,7 @@ public class MatchDetailScraper {
     }
 
     // =====================================================================
-    // Temel bilgileri çekme
+    // Temel bilgileri çekme (GÜNCELLENDİ - BEKLEME EKLENDİ)
     // =====================================================================
 
     private static void extractBasicInfo(WebDriver driver, MatchData md) {
@@ -92,60 +90,81 @@ public class MatchDetailScraper {
                                 By.cssSelector(".wcl-breadcrumbItem_8btmf span[data-testid='wcl-scores-overline-03']"));
                         return els.size() >= 2 ? els : null;
                     });
-            if (items.size() >= 3) {
+            if (items != null && items.size() >= 3) {
                 md.country = items.get(1).getText().trim();
                 md.league  = items.get(2).getText().trim();
-            } else {
+            } else if (items != null && items.size() >= 2) {
                 md.country = items.get(0).getText().trim();
                 md.league  = items.get(1).getText().trim();
             }
         } catch (Exception e) {
-            System.out.println("    [WARN] Breadcrumb alinamadi: " + md.matchId);
+            System.out.println("    [WARN] Country/League alinamadi: " + md.matchId);
         }
 
-        // DateTime
+        // DateTime (Bekleme eklendi)
         try {
-            md.matchDateTime = driver.findElement(
-                    By.cssSelector(".duelParticipant__startTime div")).getText().trim();
-        } catch (Exception ignored) {}
+            WebElement dateEl = WaitActionUtils.getSmartWait(driver, 5).until(
+                    ExpectedConditions.presenceOfElementLocated(By.cssSelector(".duelParticipant__startTime div")));
+            md.matchDateTime = dateEl.getText().trim();
+        } catch (Exception ignored) {
+            System.out.println("    [WARN] DateTime alinamadi: " + md.matchId);
+        }
 
-        // FT Score
+        // FT Score (Bekleme ve Alternatif okuma yöntemi eklendi)
         try {
-            List<WebElement> spans = driver.findElements(
-                    By.cssSelector(".detailScore__wrapper span"));
+            WebElement scoreWrapper = WaitActionUtils.getSmartWait(driver, 5).until(
+                    ExpectedConditions.presenceOfElementLocated(By.cssSelector(".detailScore__wrapper")));
+
+            List<WebElement> spans = scoreWrapper.findElements(By.tagName("span"));
             if (spans.size() >= 3) {
                 String home = spans.get(0).getText().trim();
                 String away = spans.get(2).getText().trim();
                 if (!home.isEmpty() && !away.isEmpty()) md.ftScore = home + "-" + away;
+            } else {
+                // Flashscore bazen span yerine direkt text basabiliyor, yedek çözüm:
+                String rawScore = scoreWrapper.getText().replaceAll("\\n", "").replaceAll("\\s+", "");
+                if (rawScore.contains("-") && rawScore.length() >= 3) {
+                    md.ftScore = rawScore;
+                }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+            System.out.println("    [WARN] FT Score alinamadi: " + md.matchId);
+        }
     }
 
     // =====================================================================
-    // HT skoru çekme
+    // HT skoru çekme (GÜNCELLENDİ - BEKLEME EKLENDİ)
     // =====================================================================
 
     private static void extractHtScore(WebDriver driver, MatchData md) {
         try {
-            WebElement htEl = WaitActionUtils.getSmartWait(driver, 3).until(
+            WebElement htEl = WaitActionUtils.getSmartWait(driver, 4).until(
                     ExpectedConditions.presenceOfElementLocated(
                             By.cssSelector("span[data-testid='wcl-scores-overline-02'] div")));
             String text = htEl.getText().trim();
-            if (!text.isEmpty()) { md.htScore = text; return; }
+            if (!text.isEmpty()) {
+                md.htScore = text;
+                return;
+            }
         } catch (Exception ignored) {}
 
+        // Eğer ilk yöntem çalışmazsa fallback (ikinci) yöntemi dene
         try {
             List<WebElement> incidentRows = driver.findElements(
                     By.cssSelector(".smv__incidentsHeader,.smv__halfTime,[class*='halfTime'],[class*='half-time']"));
             for (WebElement row : incidentRows) {
                 java.util.regex.Matcher m = Pattern.compile("(\\d+\\s*[:\\-]\\s*\\d+)").matcher(row.getText().trim());
-                if (m.find()) { md.htScore = m.group(1).replaceAll("\\s+", ""); return; }
+                if (m.find()) {
+                    md.htScore = m.group(1).replaceAll("\\s+", "");
+                    return;
+                }
             }
         } catch (Exception ignored) {}
     }
 
+
     // =====================================================================
-    // Odds sekmesini scrape etme
+    // AŞAĞIDAKİ HİÇBİR KODA (ODDS VE TAB TIKLAMA) DOKUNULMAMIŞTIR !
     // =====================================================================
 
     private static void scrapeAllOdds(WebDriver driver, MatchData md) {
