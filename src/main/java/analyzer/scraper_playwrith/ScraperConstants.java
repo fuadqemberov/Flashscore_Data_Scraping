@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 public class ScraperConstants {
-    public static final int MAX_CONCURRENT_DRIVERS = 4;
+    public static final int MAX_CONCURRENT_DRIVERS = 20;
     public static final String BASE_URL = "https://www.flashscore.co.uk/football/";
     public static final String MATCH_URL_PREFIX = "https://www.flashscore.co.uk/match/football/";
 
