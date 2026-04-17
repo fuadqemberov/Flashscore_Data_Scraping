@@ -2,6 +2,7 @@ package analyzer.scraper_playwrith;
 
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.LoadState;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -10,25 +11,27 @@ public class MatchDetailScraper {
 
     public static void scrapeMatch(Page page, MatchData md) {
         try {
+            // Maç sayfasına git
             page.navigate(ScraperConstants.MATCH_URL_PREFIX + md.matchId);
-            page.waitForLoadState(com.microsoft.playwright.options.LoadState.DOMCONTENTLOADED);
+            page.waitForLoadState(LoadState.DOMCONTENTLOADED);
 
-            // Sayfa iskeleti gelsin
+            // Sayfanın iskeleti gelsin
             page.waitForSelector(".duelParticipant", new Page.WaitForSelectorOptions().setTimeout(10000));
 
-            // 🚀 ORANLARI DÜZELT (Artık Timeout vermeyecek!)
-            OddsConfigurator.configureDecimalOdds(page);
-
+            // 1. Temel Bilgileri Çek
             extractBasicInfo(page, md);
+
+            // 2. HT Skoru için SUMMARY tabına tıkla
             clickTab(page, "SUMMARY");
             extractHtScore(page, md);
 
+            // 3. Oranlar (ODDS) tabına geç
             if (!clickTab(page, "ODDS")) return;
 
-            // ODDS tabında Bet365'i bekle
+            // Bet365 var mı kontrol et
             if (!waitForBet365(page)) return;
 
-            // Kazı
+            // 4. Tüm Oranları Kazı (Matematiksel dönüştürme ile)
             scrapeAllOdds(page, md);
 
         } catch (Exception e) {
@@ -38,36 +41,23 @@ public class MatchDetailScraper {
 
     private static void extractBasicInfo(Page page, MatchData md) {
         try {
-            // Country & League (Breadcrumb üzerinden)
             Locator items = page.locator(".wcl-breadcrumbItem_8btmf span[data-testid='wcl-scores-overline-03']");
             if (items.count() >= 3) {
                 md.country = items.nth(1).innerText().trim();
                 md.league  = items.nth(2).innerText().trim();
-            } else if (items.count() >= 2) {
-                md.country = items.nth(0).innerText().trim();
-                md.league  = items.nth(1).innerText().trim();
             }
-
-            // Maç Zamanı
             md.matchDateTime = page.locator(".duelParticipant__startTime div").innerText().trim();
 
-            // FT Skoru (Maç Sonu)
             Locator scoreWrapper = page.locator(".detailScore__wrapper");
             String scoreText = scoreWrapper.innerText().replaceAll("\\n", "").replaceAll("\\s+", "");
-            if (scoreText.contains("-")) {
-                md.ftScore = scoreText;
-            }
+            if (scoreText.contains("-")) md.ftScore = scoreText;
         } catch (Exception ignored) {}
     }
 
     private static void extractHtScore(Page page, MatchData md) {
         try {
-            // Üstteki HT yazısından skoru yakala
             Locator ht = page.locator("span[data-testid='wcl-scores-overline-02'] div");
-            if (ht.count() > 0) {
-                String val = ht.first().innerText().trim();
-                if (!val.isEmpty()) md.htScore = val;
-            }
+            if (ht.count() > 0) md.htScore = ht.first().innerText().trim();
         } catch (Exception ignored) {}
     }
 
@@ -79,15 +69,11 @@ public class MatchDetailScraper {
             if (!clickOddsSubTab(page, tabName)) continue;
 
             for (String period : ScraperConstants.HALF_TABS) {
-                // Correct Score'da 2. yarı genelde olmaz
                 if (tabKey.equals("Correct score") && period.equals("2nd Half")) continue;
-
-                // Period tabına tıkla (Full Time değilse)
                 if (!period.equals("Full Time") && !clickPeriodTab(page, period)) continue;
 
                 if (!waitForBet365(page)) continue;
 
-                // Veri kazıma işlemi
                 switch (tabKey) {
                     case "1x2"           -> scrapeSimple(page, md, tabKey, period, new String[]{"Home", "Draw", "Away"});
                     case "Over/Under"    -> scrapeOverUnder(page, md, tabKey, period);
@@ -96,54 +82,45 @@ public class MatchDetailScraper {
                     case "Correct score" -> scrapeCorrectScore(page, md, tabKey, period);
                 }
             }
-            // Ana ODDS tabına dön
             clickTab(page, "ODDS");
         }
     }
 
-    // --- YARDIMCI METODLAR (Tıklama ve Bekleme) ---
-
-    private static boolean clickTab(Page page, String name) {
+    // --- MATEMATİKSEL DÖNÜŞTÜRÜCÜ (KESİNLİKLE ÇALIŞAN KISIM) ---
+    private static String getOpeningOdd(Locator cell) {
         try {
-            Locator t = page.locator("[data-testid='wcl-tab']:has-text('" + name + "')").first();
-            if (t.isVisible()) { t.click(); page.waitForTimeout(300); return true; }
-        } catch (Exception ignored) {}
-        return false;
-    }
+            String raw = "";
+            String title = cell.getAttribute("title");
 
-    private static boolean clickOddsSubTab(Page page, String name) {
-        try {
-            Locator t = page.locator("button:has-text('" + name + "'), [data-testid='wcl-tab']:has-text('" + name + "')").first();
-            if (t.isVisible()) { t.click(); page.waitForTimeout(400); return true; }
-        } catch (Exception ignored) {}
-        return false;
-    }
+            // Açılış oranı title içindeyse onu al (Selenium title mantığı)
+            if (title != null && title.contains("»")) {
+                raw = title.split("»")[0].trim();
+            } else {
+                raw = cell.innerText().trim();
+            }
 
-    private static boolean clickPeriodTab(Page page, String period) {
-        try {
-            String pStr = period.toUpperCase();
-            Locator t = page.locator("[data-testid='wcl-tab']:has-text('" + pStr + "')").first();
-            if (t.isVisible()) { t.click(); page.waitForTimeout(300); return true; }
-        } catch (Exception ignored) {}
-        return false;
+            // Eğer değer "21/50" veya "15/4" gibi kesirliyse çevir
+            if (raw.contains("/")) {
+                String[] p = raw.split("/");
+                double pay = Double.parseDouble(p[0].trim());
+                double payda = Double.parseDouble(p[1].trim());
+                double result = (pay / payda) + 1;
+                return String.format("%.2f", result).replace(",", ".");
+            } else if (raw.equalsIgnoreCase("EVS")) {
+                return "2.00";
+            }
+            return raw; // Zaten ondalıksa dokunma
+        } catch (Exception e) {
+            return "-";
+        }
     }
-
-    private static boolean waitForBet365(Page page) {
-        try {
-            page.waitForSelector("img[alt*='bet365'], [data-analytics-bookmaker-id='16']",
-                    new Page.WaitForSelectorOptions().setTimeout(3000));
-            return true;
-        } catch (Exception e) { return false; }
-    }
-
-    // --- VERİ ÇEKME METODLARI ---
 
     private static void scrapeSimple(Page page, MatchData md, String tab, String period, String[] labels) {
         try {
             Locator rows = page.locator(".ui-table__row");
             for (int i = 0; i < rows.count(); i++) {
                 Locator row = rows.nth(i);
-                if (row.locator("img[alt*='bet365'], [data-analytics-bookmaker-id='16']").count() > 0) {
+                if (isBet365(row)) {
                     Locator cells = row.locator("a.oddsCell__odd");
                     for (int j = 0; j < Math.min(cells.count(), labels.length); j++) {
                         md.oddsMap.put(tab + "|" + period + "|" + labels[j], getOpeningOdd(cells.nth(j)));
@@ -160,10 +137,10 @@ public class MatchDetailScraper {
             Locator rows = page.locator(".ui-table__row");
             for (int i = 0; i < rows.count(); i++) {
                 Locator row = rows.nth(i);
-                if (row.locator("img[alt*='bet365'], [data-analytics-bookmaker-id='16']").count() > 0) {
-                    double threshold = Double.parseDouble(row.locator("[data-testid='wcl-oddsValue']").innerText().trim());
+                if (isBet365(row)) {
+                    double th = Double.parseDouble(row.locator("[data-testid='wcl-oddsValue']").innerText().trim());
                     Locator cells = row.locator("a.oddsCell__odd");
-                    map.put(threshold, new String[]{
+                    map.put(th, new String[]{
                             cells.count() >= 1 ? getOpeningOdd(cells.nth(0)) : "-",
                             cells.count() >= 2 ? getOpeningOdd(cells.nth(1)) : "-"
                     });
@@ -183,12 +160,11 @@ public class MatchDetailScraper {
             Locator rows = page.locator(".ui-table__row");
             for (int i = 0; i < rows.count(); i++) {
                 Locator row = rows.nth(i);
-                if (row.locator("img[alt*='bet365'], [data-analytics-bookmaker-id='16']").count() > 0) {
+                if (isBet365(row)) {
                     String score = (String) row.evaluate("el => { " +
                                                          "let s = el.querySelectorAll('span:not(.oddsCell__arrow)'); " +
                                                          "for(let x of s){ if(x.textContent.match(/\\d+:\\d+/)) return x.textContent.trim(); } " +
                                                          "return null; }");
-
                     if (score != null) {
                         md.oddsMap.put(tab + "|" + period + "|" + score, getOpeningOdd(row.locator("a.oddsCell__odd").first()));
                     }
@@ -197,11 +173,40 @@ public class MatchDetailScraper {
         } catch (Exception ignored) {}
     }
 
-    private static String getOpeningOdd(Locator cell) {
+    // --- YARDIMCI METODLAR ---
+    private static boolean isBet365(Locator row) {
+        return row.locator("img[alt*='bet365'], [data-analytics-bookmaker-id='16']").count() > 0;
+    }
+
+    private static boolean clickTab(Page page, String name) {
         try {
-            String title = cell.getAttribute("title");
-            if (title != null && title.contains("»")) return title.split("»")[0].trim();
-            return cell.innerText().trim();
-        } catch (Exception e) { return "-"; }
+            Locator t = page.locator("[data-testid='wcl-tab']:has-text('" + name + "')").first();
+            if (t.isVisible()) { t.click(); page.waitForTimeout(300); return true; }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private static boolean clickOddsSubTab(Page page, String name) {
+        try {
+            Locator t = page.locator("button:has-text('" + name + "'), [data-testid='wcl-tab']:has-text('" + name + "')").first();
+            if (t.isVisible()) { t.click(); page.waitForTimeout(400); return true; }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private static boolean clickPeriodTab(Page page, String period) {
+        try {
+            Locator t = page.locator("[data-testid='wcl-tab']:has-text('" + period.toUpperCase() + "')").first();
+            if (t.isVisible()) { t.click(); page.waitForTimeout(300); return true; }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private static boolean waitForBet365(Page page) {
+        try {
+            page.waitForSelector("img[alt*='bet365'], [data-analytics-bookmaker-id='16']",
+                    new Page.WaitForSelectorOptions().setTimeout(3000));
+            return true;
+        } catch (Exception e) { return false; }
     }
 }
