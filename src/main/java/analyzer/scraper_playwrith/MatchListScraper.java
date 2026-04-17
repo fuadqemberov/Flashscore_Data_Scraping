@@ -43,6 +43,6 @@ public class MatchListScraper {
             }
             page.navigate(ScraperConstants.BASE_URL);
         }
-        return allMatches.subList(0,10);
+        return allMatches;
     }
 }
