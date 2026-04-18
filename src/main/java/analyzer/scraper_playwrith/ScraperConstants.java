@@ -1,13 +1,9 @@
 package analyzer.scraper_playwrith;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class ScraperConstants {
-    public static final int MAX_CONCURRENT_DRIVERS = 20;
+    public static final int MAX_CONCURRENT_DRIVERS = 6;
     public static final String BASE_URL = "https://www.flashscore.co.uk/football/";
     public static final String MATCH_URL_PREFIX = "https://www.flashscore.co.uk/match/football/";
 

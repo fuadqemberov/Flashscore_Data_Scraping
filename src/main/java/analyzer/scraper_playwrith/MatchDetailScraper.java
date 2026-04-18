@@ -2,40 +2,80 @@ package analyzer.scraper_playwrith;
 
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
-import com.microsoft.playwright.options.LoadState;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 public class MatchDetailScraper {
 
+    private static final Random RANDOM = new Random();
+
     public static void scrapeMatch(Page page, MatchData md) {
-        try {
-            // Maç sayfasına git
-            page.navigate(ScraperConstants.MATCH_URL_PREFIX + md.matchId);
-            page.waitForLoadState(LoadState.DOMCONTENTLOADED);
+        int maxRetry = 3;
+        for (int attempt = 1; attempt <= maxRetry; attempt++) {
+            try {
+                // Her denemeden önce rastgele kısa bekleme (rate limit önlemi)
+                if (attempt > 1) {
+                    long wait = 3000 + RANDOM.nextInt(4000); // 3-7 sn
+                    Thread.sleep(wait);
+                }
 
-            // Sayfanın iskeleti gelsin
-            page.waitForSelector(".duelParticipant", new Page.WaitForSelectorOptions().setTimeout(10000));
+                // Sayfaya git — timeout artırıldı, domcontentloaded kullanılıyor
+                page.navigate(
+                        ScraperConstants.MATCH_URL_PREFIX + md.matchId,
+                        new Page.NavigateOptions()
+                                .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED)
+                                .setTimeout(45000)
+                );
 
-            // 1. Temel Bilgileri Çek
-            extractBasicInfo(page, md);
+                // .duelParticipant görünür olana kadar bekle — önce ATTACHED, sonra scroll
+                page.waitForSelector(
+                        ".duelParticipant",
+                        new Page.WaitForSelectorOptions()
+                                .setState(com.microsoft.playwright.options.WaitForSelectorState.ATTACHED)
+                                .setTimeout(15000)
+                );
 
-            // 2. HT Skoru için SUMMARY tabına tıkla
-            clickTab(page, "SUMMARY");
-            extractHtScore(page, md);
+                // Gizliyse scroll ile tetikle, sonra visible bekle
+                try {
+                    page.locator(".duelParticipant").first().scrollIntoViewIfNeeded();
+                    page.waitForSelector(
+                            ".duelParticipant",
+                            new Page.WaitForSelectorOptions()
+                                    .setState(com.microsoft.playwright.options.WaitForSelectorState.VISIBLE)
+                                    .setTimeout(8000)
+                    );
+                } catch (Exception ignored) {
+                    // Görünür olmasa bile devam et, bilgi kısmen alınabilir
+                }
 
-            // 3. Oranlar (ODDS) tabına geç
-            if (!clickTab(page, "ODDS")) return;
+                // 1. Temel Bilgileri Çek
+                extractBasicInfo(page, md);
 
-            // Bet365 var mı kontrol et
-            if (!waitForBet365(page)) return;
+                // 2. HT Skoru için SUMMARY tabına tıkla
+                clickTab(page, "SUMMARY");
+                extractHtScore(page, md);
 
-            // 4. Tüm Oranları Kazı (Matematiksel dönüştürme ile)
-            scrapeAllOdds(page, md);
+                // 3. Oranlar (ODDS) tabına geç
+                if (!clickTab(page, "ODDS")) return;
 
-        } catch (Exception e) {
-            System.err.println("   [ERR] " + md.matchId + " -> " + e.getMessage());
+                // Bet365 var mı kontrol et
+                if (!waitForBet365(page)) return;
+
+                // 4. Tüm Oranları Kazı
+                scrapeAllOdds(page, md);
+
+                // Başarılıysa döngüden çık
+                return;
+
+            } catch (Exception e) {
+                if (attempt == maxRetry) {
+                    System.err.println("   [ERR] " + md.matchId + " -> " + e.getMessage());
+                } else {
+                    System.err.println("   [RETRY " + attempt + "/" + maxRetry + "] " + md.matchId);
+                }
+            }
         }
     }
 
@@ -86,20 +126,17 @@ public class MatchDetailScraper {
         }
     }
 
-    // --- MATEMATİKSEL DÖNÜŞTÜRÜCÜ (KESİNLİKLE ÇALIŞAN KISIM) ---
     private static String getOpeningOdd(Locator cell) {
         try {
             String raw = "";
             String title = cell.getAttribute("title");
 
-            // Açılış oranı title içindeyse onu al (Selenium title mantığı)
             if (title != null && title.contains("»")) {
                 raw = title.split("»")[0].trim();
             } else {
                 raw = cell.innerText().trim();
             }
 
-            // Eğer değer "21/50" veya "15/4" gibi kesirliyse çevir
             if (raw.contains("/")) {
                 String[] p = raw.split("/");
                 double pay = Double.parseDouble(p[0].trim());
@@ -109,7 +146,7 @@ public class MatchDetailScraper {
             } else if (raw.equalsIgnoreCase("EVS")) {
                 return "2.00";
             }
-            return raw; // Zaten ondalıksa dokunma
+            return raw;
         } catch (Exception e) {
             return "-";
         }
@@ -162,9 +199,9 @@ public class MatchDetailScraper {
                 Locator row = rows.nth(i);
                 if (isBet365(row)) {
                     String score = (String) row.evaluate("el => { " +
-                                                         "let s = el.querySelectorAll('span:not(.oddsCell__arrow)'); " +
-                                                         "for(let x of s){ if(x.textContent.match(/\\d+:\\d+/)) return x.textContent.trim(); } " +
-                                                         "return null; }");
+                            "let s = el.querySelectorAll('span:not(.oddsCell__arrow)'); " +
+                            "for(let x of s){ if(x.textContent.match(/\\d+:\\d+/)) return x.textContent.trim(); } " +
+                            "return null; }");
                     if (score != null) {
                         md.oddsMap.put(tab + "|" + period + "|" + score, getOpeningOdd(row.locator("a.oddsCell__odd").first()));
                     }
@@ -173,7 +210,6 @@ public class MatchDetailScraper {
         } catch (Exception ignored) {}
     }
 
-    // --- YARDIMCI METODLAR ---
     private static boolean isBet365(Locator row) {
         return row.locator("img[alt*='bet365'], [data-analytics-bookmaker-id='16']").count() > 0;
     }

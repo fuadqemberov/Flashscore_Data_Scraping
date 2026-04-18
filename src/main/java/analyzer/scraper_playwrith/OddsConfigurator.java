@@ -1,7 +1,7 @@
 package analyzer.scraper_playwrith;
 
-import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.Page;
 
 public class OddsConfigurator {
 

@@ -1,10 +1,6 @@
 package analyzer.scraper_playwrith;
 
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
-import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.*;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;

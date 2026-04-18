@@ -54,16 +54,11 @@
         <!-- ========================================== -->
         <!-- 3. LOGLAMA (SLF4J ÇATIŞMALARI GİDERİLDİ)   -->
         <!-- ========================================== -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.slf4j</groupId>-->
+<!--            <artifactId>slf4j-api</artifactId>-->
+<!--            <version>${slf4j.version}</version>-->
+<!--        </dependency>-->
 
         <!-- ========================================== -->
         <!-- 4. HTTP VE JSON İŞLEMLERİ                  -->

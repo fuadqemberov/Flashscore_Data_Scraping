@@ -25,9 +25,15 @@ public class PlaywrightThreadFactory implements ThreadFactory {
                 .setChannel("msedge")
                 .setArgs(List.of(
                         "--disable-dev-shm-usage",
-                        "--disable-gpu",
                         "--no-sandbox",
-                        "--disable-blink-features=AutomationControlled"
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-extensions",
+                        "--disable-background-networking",
+                        "--disable-sync",
+                        "--hide-scrollbars",
+                        "--mute-audio",
+                        "--no-first-run",
+                        "--js-flags=--max-old-space-size=512"
                 )));
     }
 
