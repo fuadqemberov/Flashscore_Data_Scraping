@@ -8,7 +8,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 
-import static analyzer.flashscore.gui.ScraperConstants.STATIC_COLUMN_KEYS;
+import static analyzer.flashscore.ScraperConstants.STATIC_COLUMN_KEYS;
+
 
 public class ExcelReportService {
     public static void generateReport(List<MatchData> data, String filename) throws IOException {
@@ -43,7 +44,7 @@ public class ExcelReportService {
 
         String lastGrp = "";
         int grpStartCol = FIXED;
-        for (int i = 0; i < ScraperConstants.STATIC_COLUMN_KEYS.size(); i++) {
+        for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
             String key = STATIC_COLUMN_KEYS.get(i);
             String[] p = key.split("\\|");
             String grp = p[0] + " | " + p[1];
