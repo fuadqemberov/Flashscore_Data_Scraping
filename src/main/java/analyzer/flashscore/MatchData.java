@@ -1,4 +1,4 @@
-package analyzer.scraper_playwrith;
+package analyzer.flashscore;
 
 import java.util.HashMap;
 import java.util.Map;

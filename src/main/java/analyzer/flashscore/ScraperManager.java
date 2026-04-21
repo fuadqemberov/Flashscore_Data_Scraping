@@ -1,8 +1,7 @@
-package analyzer.scraper_playwrith;
+package analyzer.flashscore;
 
 import com.microsoft.playwright.Page;
 
-import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 

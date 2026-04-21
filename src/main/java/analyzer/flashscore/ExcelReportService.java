@@ -1,4 +1,4 @@
-package analyzer.scraper_playwrith;
+package analyzer.flashscore;
 
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;

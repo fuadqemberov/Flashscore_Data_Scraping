@@ -1,4 +1,4 @@
-package analyzer.scraper_playwrith;
+package analyzer.flashscore;
 
 import com.microsoft.playwright.*;
 import javafx.application.Application;

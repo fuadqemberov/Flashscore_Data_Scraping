@@ -1,4 +1,4 @@
-package analyzer.flashscore.gui;
+package analyzer.flashscore;
 
 import java.util.*;
 

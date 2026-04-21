@@ -1,4 +1,4 @@
-package analyzer.scraper_playwrith;
+package analyzer.flashscore;
 
 public class AppLauncher {
     static void main(String[] args) {
