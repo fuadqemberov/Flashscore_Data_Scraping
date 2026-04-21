@@ -28,8 +28,8 @@ import java.util.logging.Logger;
 public class FutbolAvciBotu {
 
     // ─── AYARLAR ────────────────────────────────────────────────────────────
-    static String anaSayfaUrl               = "https://arsiv.mackolik.com/Canli-Sonuclar";
-    static int    geriyeGidilecekSezonSayisi = 6;
+    static String anaSayfaUrl = "https://arsiv.mackolik.com/Canli-Sonuclar";
+    static int geriyeGidilecekSezonSayisi = 6;
 
     /**
      * Aynı anda kaç lig paralel işlensin?
@@ -38,29 +38,6 @@ public class FutbolAvciBotu {
      * Çok yüksek değer → mackolik.com rate-limit veya bellek sorunu yaratabilir.
      */
     static int THREAD_SAYISI = 4;
-
-    // ─── VERİ MODELİ ────────────────────────────────────────────────────────
-    public static class MacVerisi {
-        String sezon;
-        int    hafta;
-        int    sezonYarisi;
-        String evSahibi;
-        String deplasman;
-        String ilkYariSkor;
-        String skor;
-
-        public MacVerisi(String sezon, int hafta, int sezonYarisi,
-                         String evSahibi, String deplasman,
-                         String ilkYariSkor, String skor) {
-            this.sezon        = sezon;
-            this.hafta        = hafta;
-            this.sezonYarisi  = sezonYarisi;
-            this.evSahibi     = evSahibi;
-            this.deplasman    = deplasman;
-            this.ilkYariSkor  = ilkYariSkor;
-            this.skor         = skor;
-        }
-    }
 
     // ─── MAIN ───────────────────────────────────────────────────────────────
     public static void main(String[] args) {
@@ -95,8 +72,8 @@ public class FutbolAvciBotu {
         List<Future<?>> futures = new ArrayList<>();
 
         for (int i = 0; i < toplam; i++) {
-            final String ligUrl  = ligListesi.get(i);
-            final int    siraNo  = i + 1;
+            final String ligUrl = ligListesi.get(i);
+            final int siraNo = i + 1;
 
             Future<?> f = executor.submit(() -> {
                 // Her task kendi ChromeDriver örneğini açıp kapatır
@@ -127,21 +104,16 @@ public class FutbolAvciBotu {
         System.out.println("\nTÜM İŞLEMLER TAMAMLANDI!");
     }
 
-    // ─── YENI DRIVER FABRIKA ─────────────────────────────────────────────────
-    /**
-     * Her çağrıda yeni, bağımsız bir ChromeDriver döner.
-     * Thread-safety için her worker bu metodu kendi başına çağırır.
-     */
-    private static WebDriver yeniDriver() {
-        return new ChromeDriver(getOptions());
-    }
-
     // ─── ANA SAYFADAN LİGLERİ ÇEK ───────────────────────────────────────────
     private static List<String> getLigUrlListesi(WebDriver driver) {
         System.out.println("Ana sayfa yükleniyor, ligler tespit ediliyor: " + anaSayfaUrl);
         driver.get(anaSayfaUrl);
 
-        try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
 
         List<String> ligUrls = new ArrayList<>();
         List<WebElement> ligElementleri = driver.findElements(
@@ -156,26 +128,20 @@ public class FutbolAvciBotu {
         return ligUrls;
     }
 
-    // ─── CHROME AYARLARI ────────────────────────────────────────────────────
-    private static ChromeOptions getOptions() {
-        ChromeOptions options = new ChromeOptions();
-        options.addArguments(
-                "--headless",
-                "--disable-notifications",
-                "--log-level=3",
-                "--disable-gpu",
-                "--no-sandbox",
-                "--disable-dev-shm-usage", // Paylaşımlı bellek sorunlarını önler (özellikle headless çoklu thread)
-                "--silent"
-        );
-        options.addArguments("--blink-settings=imagesEnabled=false");
-        return options;
+    // ─── YENI DRIVER FABRIKA ─────────────────────────────────────────────────
+
+    /**
+     * Her çağrıda yeni, bağımsız bir ChromeDriver döner.
+     * Thread-safety için her worker bu metodu kendi başına çağırır.
+     */
+    private static WebDriver yeniDriver() {
+        return new ChromeDriver(getOptions());
     }
 
     // ─── ANA ANALİZ ─────────────────────────────────────────────────────────
     public static void analizLig(WebDriver driver, WebDriverWait wait, String ligPuanDurumUrl) throws InterruptedException {
         List<MacVerisi> bugunkuHedefMaclar = new ArrayList<>();
-        List<MacVerisi> gecmisVeriHavuzu  = new ArrayList<>();
+        List<MacVerisi> gecmisVeriHavuzu = new ArrayList<>();
 
         driver.get(ligPuanDurumUrl);
         Thread.sleep(2500);
@@ -200,7 +166,7 @@ public class FutbolAvciBotu {
 
         int hedefYari = (suAnkiHafta <= liginOrtasi) ? 1 : 2;
         log("  Hafta: " + suAnkiHafta + " / " + toplamHafta + " | Yarı: " + hedefYari
-                + " | " + ligPuanDurumUrl);
+            + " | " + ligPuanDurumUrl);
 
         bugunkuHedefMaclar.addAll(getMaclariHaftadan(driver, suAnkiHafta, hedefYari, true));
 
@@ -219,7 +185,7 @@ public class FutbolAvciBotu {
             if (si >= sezonOptions.size()) break;
 
             String sezonDegeri = sezonOptions.get(si).getAttribute("value");
-            String sezonAdi    = sezonOptions.get(si).getText().trim();
+            String sezonAdi = sezonOptions.get(si).getText().trim();
             log("  -> Sezon kazınıyor: " + sezonAdi + " | " + ligPuanDurumUrl);
 
             ((JavascriptExecutor) driver).executeScript("getNationalSeason('" + sezonDegeri + "');");
@@ -228,7 +194,7 @@ public class FutbolAvciBotu {
             clickFiksturTab(driver, wait);
 
             int baslangic = (hedefYari == 1) ? 1 : (liginOrtasi + 1);
-            int bitis     = (hedefYari == 1) ? liginOrtasi : toplamHafta;
+            int bitis = (hedefYari == 1) ? liginOrtasi : toplamHafta;
 
             for (int w = baslangic; w <= bitis; w++) {
                 try {
@@ -253,6 +219,22 @@ public class FutbolAvciBotu {
         }
     }
 
+    // ─── CHROME AYARLARI ────────────────────────────────────────────────────
+    private static ChromeOptions getOptions() {
+        ChromeOptions options = new ChromeOptions();
+        options.addArguments(
+                "--headless",
+                "--disable-notifications",
+                "--log-level=3",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-dev-shm-usage", // Paylaşımlı bellek sorunlarını önler (özellikle headless çoklu thread)
+                "--silent"
+        );
+        options.addArguments("--blink-settings=imagesEnabled=false");
+        return options;
+    }
+
     // ─── FİKSTÜR SEKMESİNE TIK ──────────────────────────────────────────────
     private static void clickFiksturTab(WebDriver driver, WebDriverWait wait) throws InterruptedException {
         try {
@@ -261,7 +243,8 @@ public class FutbolAvciBotu {
                             By.xpath("//a[contains(text(),'Fikstür') or contains(text(),'FİKSTÜR')]")));
             ((JavascriptExecutor) driver).executeScript("arguments[0].click();", fiksturLink);
             Thread.sleep(1500);
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
     }
 
     // ─── BİR HAFTADAKİ MAÇLARI OKU ──────────────────────────────────────────
@@ -274,18 +257,18 @@ public class FutbolAvciBotu {
                 List<WebElement> tdler = satir.findElements(By.tagName("td"));
                 if (tdler.size() < 9) continue;
 
-                String durum     = tdler.get(1).getText().trim();
-                String evSahibi  = getTextFromTd(tdler.get(3));
+                String durum = tdler.get(1).getText().trim();
+                String evSahibi = getTextFromTd(tdler.get(3));
                 String deplasman = getTextFromTd(tdler.get(7));
                 if (evSahibi.isEmpty() || deplasman.isEmpty()) continue;
 
                 String skor = tdler.get(5).getText().trim();
-                String hy   = tdler.get(8).getText().trim();
+                String hy = tdler.get(8).getText().trim();
                 if (hy.isEmpty()) hy = "?-?";
 
                 boolean bitti = durum.equalsIgnoreCase("MS")
-                        || durum.equalsIgnoreCase("UZ")
-                        || durum.equalsIgnoreCase("Pen");
+                                || durum.equalsIgnoreCase("UZ")
+                                || durum.equalsIgnoreCase("Pen");
 
                 if (onlyUnplayed) {
                     if (!skor.equals("v") && bitti) continue;
@@ -295,13 +278,17 @@ public class FutbolAvciBotu {
                     sonuc.add(new MacVerisi("?", hafta, sezonYarisi, evSahibi, deplasman, hy, skor));
                 }
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
         return sonuc;
     }
 
     private static String getTextFromTd(WebElement td) {
-        try { return td.findElement(By.tagName("a")).getText().trim(); }
-        catch (Exception e) { return td.getText().trim(); }
+        try {
+            return td.findElement(By.tagName("a")).getText().trim();
+        } catch (Exception e) {
+            return td.getText().trim();
+        }
     }
 
     // ─── ÇAPRAZ FİKSTÜR ANALİZİ ─────────────────────────────────────────────
@@ -316,32 +303,32 @@ public class FutbolAvciBotu {
         Map<String, Map<String, Map<String, List<String[]>>>> tumGruplar = new LinkedHashMap<>();
 
         for (MacVerisi hedefMac : bugun) {
-            String hedefKey     = hedefMac.evSahibi + " vs " + hedefMac.deplasman;
-            String evSahibiAdi  = hedefMac.evSahibi;
+            String hedefKey = hedefMac.evSahibi + " vs " + hedefMac.deplasman;
+            String evSahibiAdi = hedefMac.evSahibi;
             String deplasmanAdi = hedefMac.deplasman;
 
             for (MacVerisi referansMac : bugun) {
                 if (hedefMac.evSahibi.equals(referansMac.evSahibi)
-                        && hedefMac.deplasman.equals(referansMac.deplasman)) continue;
+                    && hedefMac.deplasman.equals(referansMac.deplasman)) continue;
 
                 String referansLabel = referansMac.evSahibi + " vs " + referansMac.deplasman;
 
-                List<String>  refSezonlar = new ArrayList<>();
+                List<String> refSezonlar = new ArrayList<>();
                 List<Integer> refHaftalar = new ArrayList<>();
                 for (MacVerisi g : gecmis) {
                     if (g.evSahibi.equals(referansMac.evSahibi)
-                            && g.deplasman.equals(referansMac.deplasman)) {
+                        && g.deplasman.equals(referansMac.deplasman)) {
                         refSezonlar.add(g.sezon);
                         refHaftalar.add(g.hafta);
                     }
                 }
                 if (refHaftalar.isEmpty()) continue;
 
-                List<String[]> evSahibiSatirlar  = new ArrayList<>();
+                List<String[]> evSahibiSatirlar = new ArrayList<>();
                 List<String[]> deplasmanSatirlar = new ArrayList<>();
 
                 for (int idx = 0; idx < refHaftalar.size(); idx++) {
-                    int    refHafta = refHaftalar.get(idx);
+                    int refHafta = refHaftalar.get(idx);
                     String refSezon = refSezonlar.get(idx);
 
                     for (MacVerisi g : gecmis) {
@@ -360,12 +347,12 @@ public class FutbolAvciBotu {
                     }
                 }
 
-                boolean evYeterli  = evSahibiSatirlar.size()  >= 2;
+                boolean evYeterli = evSahibiSatirlar.size() >= 2;
                 boolean depYeterli = deplasmanSatirlar.size() >= 2;
                 if (!evYeterli && !depYeterli) continue;
 
                 Map<String, List<String[]>> takimVerisi = new LinkedHashMap<>();
-                if (evYeterli)  takimVerisi.put(evSahibiAdi,  evSahibiSatirlar);
+                if (evYeterli) takimVerisi.put(evSahibiAdi, evSahibiSatirlar);
                 if (depYeterli) takimVerisi.put(deplasmanAdi, deplasmanSatirlar);
 
                 tumGruplar.computeIfAbsent(hedefKey, k -> new LinkedHashMap<>())
@@ -380,20 +367,20 @@ public class FutbolAvciBotu {
 
         int grupNo = 1;
         for (Map.Entry<String, Map<String, Map<String, List<String[]>>>> hedefEntry : tumGruplar.entrySet()) {
-            String   hedefMacAdi  = hedefEntry.getKey();
-            String[] parcalar     = hedefMacAdi.split(" vs ");
-            String   evSahibiAdi  = parcalar[0].trim();
-            String   deplasmanAdi = parcalar.length > 1 ? parcalar[1].trim() : "?";
+            String hedefMacAdi = hedefEntry.getKey();
+            String[] parcalar = hedefMacAdi.split(" vs ");
+            String evSahibiAdi = parcalar[0].trim();
+            String deplasmanAdi = parcalar.length > 1 ? parcalar[1].trim() : "?";
 
             int toplamSinyal = hedefEntry.getValue().values().stream()
                     .flatMap(m -> m.values().stream())
                     .mapToInt(List::size).sum();
 
             System.out.println("╔══════════════════════════════════════════════════════════════════════╗");
-            System.out.printf ("║  #%-3d  ◆ HEDEF MAÇ                                                  ║%n", grupNo++);
-            System.out.printf ("║         Ev Sahibi : %-49s║%n", evSahibiAdi);
-            System.out.printf ("║         Deplasman : %-49s║%n", deplasmanAdi);
-            System.out.printf ("║         Toplam Sinyal: %-45d║%n", toplamSinyal);
+            System.out.printf("║  #%-3d  ◆ HEDEF MAÇ                                                  ║%n", grupNo++);
+            System.out.printf("║         Ev Sahibi : %-49s║%n", evSahibiAdi);
+            System.out.printf("║         Deplasman : %-49s║%n", deplasmanAdi);
+            System.out.printf("║         Toplam Sinyal: %-45d║%n", toplamSinyal);
             System.out.println("╠══════════════════════════════════════════════════════════════════════╣");
 
             for (Map.Entry<String, Map<String, List<String[]>>> refEntry
@@ -407,7 +394,7 @@ public class FutbolAvciBotu {
                 System.out.printf("║%n");
 
                 for (Map.Entry<String, List<String[]>> takimEntry : takimVerisi.entrySet()) {
-                    String         takimAdi = takimEntry.getKey();
+                    String takimAdi = takimEntry.getKey();
                     List<String[]> satirlar = takimEntry.getValue();
                     String bugunRolu = takimAdi.equals(evSahibiAdi)
                             ? "bugün Ev Sahibi oynuyor" : "bugün Deplasman oynuyor";
@@ -434,6 +421,29 @@ public class FutbolAvciBotu {
         printCizgi('═', 72);
         System.out.printf("  Analiz Tamamlandı  |  %d hedef maç grubu%n", tumGruplar.size());
         printCizgi('═', 72);
+    }
+
+    // ─── VERİ MODELİ ────────────────────────────────────────────────────────
+    public static class MacVerisi {
+        String sezon;
+        int hafta;
+        int sezonYarisi;
+        String evSahibi;
+        String deplasman;
+        String ilkYariSkor;
+        String skor;
+
+        public MacVerisi(String sezon, int hafta, int sezonYarisi,
+                         String evSahibi, String deplasman,
+                         String ilkYariSkor, String skor) {
+            this.sezon = sezon;
+            this.hafta = hafta;
+            this.sezonYarisi = sezonYarisi;
+            this.evSahibi = evSahibi;
+            this.deplasman = deplasman;
+            this.ilkYariSkor = ilkYariSkor;
+            this.skor = skor;
+        }
     }
 
     // ─── YARDIMCI ────────────────────────────────────────────────────────────
