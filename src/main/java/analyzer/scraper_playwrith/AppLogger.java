@@ -5,19 +5,24 @@ import javafx.scene.control.TextArea;
 
 public class AppLogger {
     private static TextArea consoleArea;
+    private static long lastLogTime = 0;
 
     public static void setConsoleArea(TextArea textArea) {
         consoleArea = textArea;
     }
 
     public static void log(String message) {
-        System.out.println(message); // Arka plan konsolu için
+        System.out.println(Thread.currentThread().getName() + " - " + message);
+
         if (consoleArea != null) {
-            // UI thread'inde güvenli bir şekilde metin ekler
             Platform.runLater(() -> {
                 consoleArea.appendText(message + "\n");
-                // Otomatik olarak en alta scroll yapar
-                consoleArea.setScrollTop(Double.MAX_VALUE);
+                // Her logda değil, belirli aralıklarla scroll yaparak CPU kurtar.
+                long now = System.currentTimeMillis();
+                if (now - lastLogTime > 500) { // Saniyede en fazla 2 kere scroll yap
+                    consoleArea.setScrollTop(Double.MAX_VALUE);
+                    lastLogTime = now;
+                }
             });
         }
     }
