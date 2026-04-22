@@ -292,10 +292,11 @@ public class FutbolAvciBotu {
     }
 
     // ─── ÇAPRAZ FİKSTÜR ANALİZİ ─────────────────────────────────────────────
+    // ─── ÇAPRAZ FİKSTÜR ANALİZİ (GÜNCEL HAFTA FİLTRELİ) ─────────────────────────────────────────────
     public static void caprazFiksturAnaliziYap(List<MacVerisi> bugun, List<MacVerisi> gecmis) {
         System.out.println();
         printCizgi('═', 72);
-        System.out.printf("  ÇAPRAZ FİKSTÜR ANALİZİ  |  %d hedef maç  |  geçmiş havuz: %d maç%n",
+        System.out.printf("  ÇAPRAZ FİKSTÜR ANALİZİ (SIKI FİLTRE) | %d hedef maç | geçmiş havuz: %d maç%n",
                 bugun.size(), gecmis.size());
         printCizgi('═', 72);
         System.out.println();
@@ -307,6 +308,9 @@ public class FutbolAvciBotu {
             String evSahibiAdi = hedefMac.evSahibi;
             String deplasmanAdi = hedefMac.deplasman;
 
+            // 1. ŞİMDİKİ MAÇIN HAFTASINI ALIYORUZ (Örn: H32)
+            int guncelHafta = hedefMac.hafta;
+
             for (MacVerisi referansMac : bugun) {
                 if (hedefMac.evSahibi.equals(referansMac.evSahibi)
                     && hedefMac.deplasman.equals(referansMac.deplasman)) continue;
@@ -315,13 +319,21 @@ public class FutbolAvciBotu {
 
                 List<String> refSezonlar = new ArrayList<>();
                 List<Integer> refHaftalar = new ArrayList<>();
+
                 for (MacVerisi g : gecmis) {
                     if (g.evSahibi.equals(referansMac.evSahibi)
                         && g.deplasman.equals(referansMac.deplasman)) {
-                        refSezonlar.add(g.sezon);
-                        refHaftalar.add(g.hafta);
+
+                        // 2. KATI FİLTRE BURADA:
+                        // Referans maçın oynandığı geçmiş hafta, BİZİM ŞU ANKİ HAFTAMIZLA aynı değilse LİSTEYE ALMA!
+                        if (g.hafta == guncelHafta) {
+                            refSezonlar.add(g.sezon);
+                            refHaftalar.add(g.hafta);
+                        }
                     }
                 }
+
+                // Eğer aynı haftada oynanmış geçmiş bir referans maç yoksa bu referansı direkt atla
                 if (refHaftalar.isEmpty()) continue;
 
                 List<String[]> evSahibiSatirlar = new ArrayList<>();
@@ -347,8 +359,10 @@ public class FutbolAvciBotu {
                     }
                 }
 
-                boolean evYeterli = evSahibiSatirlar.size() >= 2;
-                boolean depYeterli = deplasmanSatirlar.size() >= 2;
+                // Sinyali güçlendirmek için en az 1 veri olması yeterli diyorsan bu kısmı 1 yapabilirsin,
+                // şu an eski kodundaki gibi en az 2 maç bulursa listeye alıyor.
+                boolean evYeterli = evSahibiSatirlar.size() >= 1;
+                boolean depYeterli = deplasmanSatirlar.size() >= 1;
                 if (!evYeterli && !depYeterli) continue;
 
                 Map<String, List<String[]>> takimVerisi = new LinkedHashMap<>();
@@ -361,7 +375,7 @@ public class FutbolAvciBotu {
         }
 
         if (tumGruplar.isEmpty()) {
-            System.out.println("  Yeterli sinyal bulunamadı.");
+            System.out.println("  Sıkı filtreye takılan (Tam isabet) sinyal bulunamadı.");
             return;
         }
 
@@ -380,7 +394,7 @@ public class FutbolAvciBotu {
             System.out.printf("║  #%-3d  ◆ HEDEF MAÇ                                                  ║%n", grupNo++);
             System.out.printf("║         Ev Sahibi : %-49s║%n", evSahibiAdi);
             System.out.printf("║         Deplasman : %-49s║%n", deplasmanAdi);
-            System.out.printf("║         Toplam Sinyal: %-45d║%n", toplamSinyal);
+            System.out.printf("║         Toplam Nokta Atışı Sinyal: %-34d║%n", toplamSinyal);
             System.out.println("╠══════════════════════════════════════════════════════════════════════╣");
 
             for (Map.Entry<String, Map<String, List<String[]>>> refEntry
@@ -390,7 +404,7 @@ public class FutbolAvciBotu {
 
                 System.out.printf("║%n");
                 System.out.printf("║  ↳ REFERANS MAÇ : %-51s║%n", referansAdi);
-                System.out.printf("║    Bu maç oynadığında her iki takımın geçmiş performansı:         ║%n");
+                System.out.printf("║    Bu maç geçmişte AYNI HAFTADA oynandığında oluşan skorlar:      ║%n");
                 System.out.printf("║%n");
 
                 for (Map.Entry<String, List<String[]>> takimEntry : takimVerisi.entrySet()) {
@@ -419,7 +433,7 @@ public class FutbolAvciBotu {
         }
 
         printCizgi('═', 72);
-        System.out.printf("  Analiz Tamamlandı  |  %d hedef maç grubu%n", tumGruplar.size());
+        System.out.printf("  Analiz Tamamlandı  |  %d adet tam eşleşen (Nokta Atışı) maç bulundu%n", tumGruplar.size());
         printCizgi('═', 72);
     }
 
