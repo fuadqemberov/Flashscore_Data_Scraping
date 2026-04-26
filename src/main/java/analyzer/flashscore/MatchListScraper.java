@@ -21,18 +21,11 @@ public class MatchListScraper {
             page.locator("#onetrust-accept-btn-handler").click(new Locator.ClickOptions().setTimeout(3000));
         } catch (Exception ignored) {}
 
-        OddsConfigurator.configureDecimalOdds(page);
-
         for (int dayOffset = 1; dayOffset <= days; dayOffset++) {
             LocalDate targetDate = LocalDate.now().minusDays(dayOffset);
             AppLogger.log("Collecting matches for: " + targetDate);
 
-            // Geri (Önceki Gün) tuşuna bas
             page.locator("[data-day-picker-arrow='prev']").click();
-
-            // ⚠️ SENIOR FIX: NETWORKIDLE kaldırıldı!
-            // SPA'nın eski DOM'u silip yenisini çizmesi için güvenli bir süre veriyoruz.
-            // 1500ms bekleme hem ban yemeni engeller hem de UI'ın oturmasını sağlar.
             page.waitForTimeout(1500);
 
             try {
@@ -60,6 +53,6 @@ public class MatchListScraper {
 
             AppLogger.log(targetDate + " tarihi için " + count + " maç bulundu.");
         }
-        return allMatches;
+        return allMatches.subList(0,10);
     }
 }

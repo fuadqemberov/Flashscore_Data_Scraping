@@ -7,6 +7,13 @@ public class ScraperConstants {
     public static final String BASE_URL = "https://www.flashscore.co.uk/football/";
     public static final String MATCH_URL_PREFIX = "https://www.flashscore.co.uk/match/football/";
 
+    // JSON odds API - sadece eventId değişiyor
+    public static final String ODDS_API_URL =
+            "https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=%s&projectId=5&geoIpCode=AZ&geoIpSubdivisionCode=AZBA";
+
+    // Bet365 bookmaker ID
+    public static final int BET365_ID = 16;
+
     public static final String[][] ODDS_TABS = {
             {"1x2", "1X2"}, {"Over/Under", "Over/Under"}, {"Both teams", "Both teams to score"},
             {"Double chance", "Double chance"}, {"Correct score", "Correct score"}
@@ -14,7 +21,8 @@ public class ScraperConstants {
     public static final String[] HALF_TABS = {"Full Time", "1st Half", "2nd Half"};
     public static final List<Double> OU_THRESHOLDS = Arrays.asList(0.5, 1.5, 2.5, 3.5, 4.5);
     public static final List<String> CORRECT_SCORES = Arrays.asList(
-            "1:0", "0:1", "1:1", "2:0", "0:2", "2:1", "1:2", "2:2", "3:0", "0:3", "3:1", "1:3", "3:2", "2:3", "3:3",
+            "1:0", "0:1", "1:1", "2:0", "0:2", "2:1", "1:2", "2:2", "3:0", "0:3",
+            "3:1", "1:3", "3:2", "2:3", "3:3",
             "4:0", "0:4", "4:1", "1:4", "4:2", "2:4", "4:3", "3:4", "4:4"
     );
 

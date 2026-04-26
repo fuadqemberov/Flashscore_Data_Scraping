@@ -14,4 +14,8 @@ public class MatchData {
         this.awayTeam = awayTeam;
         this.date = date;
     }
+
+    public MatchData() {
+
+    }
 }

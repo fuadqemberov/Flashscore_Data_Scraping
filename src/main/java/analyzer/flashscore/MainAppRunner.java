@@ -68,9 +68,6 @@ public class MainAppRunner {
         }
     }
 
-    /**
-     * Page crash olursa yeni page açarak tekrar dener
-     */
     private static List<MatchData> collectWithRetry(Page page, Browser browser, int days) {
         int maxAttempts = 3;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -96,32 +93,17 @@ public class MainAppRunner {
     }
 
     private static void runParallelScraping(List<MatchData> matches) {
-        ExecutorService executor = Executors.newFixedThreadPool(
-                ScraperConstants.MAX_CONCURRENT_DRIVERS,
-                new PlaywrightThreadFactory()
-        );
+        // Artık Playwright arka plan nesneleri oluşturmuyoruz
+        ExecutorService executor = Executors.newFixedThreadPool(ScraperConstants.MAX_CONCURRENT_DRIVERS);
 
         for (MatchData m : matches) {
             executor.submit(() -> {
-                Playwright pw = null;
-                Browser br = null;
-                BrowserContext ctx = null;
-                Page page = null;
                 try {
-                    pw = PlaywrightThreadFactory.createPlaywright();
-                    br = PlaywrightThreadFactory.createBrowser(pw);
-                    ctx = PlaywrightThreadFactory.createContext(br);
-                    page = ctx.newPage();
-
-                    MatchDetailScraper.scrapeMatch(page, m);
+                    // MatchDetailScraper artık sadece MatchData objesi istiyor
+                    MatchDetailScraper.scrapeMatch(m);
                     System.out.println("[OK] " + m.homeTeam + " vs " + m.awayTeam);
                 } catch (Exception e) {
                     System.err.println("[ERR] " + m.matchId + " -> " + e.getMessage());
-                } finally {
-                    try { if (page != null) page.close(); } catch (Exception ignored) {}
-                    try { if (ctx != null) ctx.close(); } catch (Exception ignored) {}
-                    try { if (br != null) br.close(); } catch (Exception ignored) {}
-                    try { if (pw != null) pw.close(); } catch (Exception ignored) {}
                 }
             });
         }

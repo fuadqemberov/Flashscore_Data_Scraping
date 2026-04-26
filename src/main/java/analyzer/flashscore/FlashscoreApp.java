@@ -152,6 +152,7 @@ public class FlashscoreApp extends Application {
                      BrowserContext ctx = browser.newContext();
                      Page page = ctx.newPage()) {
 
+                    // 1. Aşama için Playwright zorunlu (Dinamik JS)
                     pendingMatches = MatchListScraper.collectMatchesForDays(page, daysToProcess);
                 }
 
@@ -195,22 +196,14 @@ public class FlashscoreApp extends Application {
         int total = matches.size();
         int maxThreads = ScraperConstants.MAX_CONCURRENT_DRIVERS;
 
-        ExecutorService executor = Executors.newFixedThreadPool(maxThreads, new PlaywrightThreadFactory());
+        // Artık PlaywrightThreadFactory'ye ihtiyacımız yok. Standart Thread Pool HTTP istekleri için yeterlidir.
+        ExecutorService executor = Executors.newFixedThreadPool(maxThreads);
 
         for (MatchData m : matches) {
             executor.submit(() -> {
-                Playwright playwright = null;
-                Browser browser = null;
-                BrowserContext context = null;
-                Page page = null;
-
                 try {
-                    playwright = PlaywrightThreadFactory.createPlaywright();
-                    browser = PlaywrightThreadFactory.createBrowser(playwright);
-                    context = PlaywrightThreadFactory.createContext(browser);
-                    page = context.newPage();
-
-                    MatchDetailScraper.scrapeMatch(page, m);
+                    // MatchDetailScraper artık saf Jsoup ve HTTP Client kullanıyor.
+                    MatchDetailScraper.scrapeMatch(m);
 
                     resultList.add(m);
                     int done = doneCount.incrementAndGet();
@@ -220,14 +213,6 @@ public class FlashscoreApp extends Application {
 
                 } catch (Exception e) {
                     AppLogger.log(" [ERR] " + m.homeTeam + " -> " + e.getMessage());
-                } finally {
-                    try {
-                        if (page != null) page.close();
-                        if (context != null) context.close();
-                        if (browser != null) browser.close();
-                        if (playwright != null) playwright.close();
-                    } catch (Exception ignored) {
-                    }
                 }
             });
         }
