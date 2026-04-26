@@ -1,24 +1,22 @@
 package analyzer.flashscore;
 
+import com.microsoft.playwright.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MatchDetailScraper {
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
-            .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+            .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
     public static void scrapeMatch(MatchData md) {
@@ -27,13 +25,13 @@ public class MatchDetailScraper {
             try {
                 if (attempt > 1) Thread.sleep(2000 + (long)(Math.random() * 3000));
 
-                // 1. HTTP GET ile maç sayfasından skor ve takım adlarını çek
-                extractMatchInfo(md);
+                // 1. Playwright ilə yalnız əsas məlumatları (Adlar, FT, HT) çək
+                extractMatchWithPlaywright(md);
 
-                // 2. JSON API'den Bet365 oranlarını çek
+                // 2. JSON API'dən Bet365 oranlarını çək (Sənin ideal metodun)
                 extractOddsFromJson(md);
 
-                return; // Başarılı
+                return; // Uğurludursa çıx
 
             } catch (Exception e) {
                 if (attempt == maxRetry) {
@@ -45,77 +43,94 @@ public class MatchDetailScraper {
         }
     }
 
-    // ─── Maç Bilgisi: HTTP GET + JSoup HTML Parse ────────────────────────────
+    private static void extractMatchWithPlaywright(MatchData md) {
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+            BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"));
 
-    private static void extractMatchInfo(MatchData md) throws IOException, InterruptedException {
-        String url = ScraperConstants.MATCH_URL_PREFIX + md.matchId;
-        String html = httpGet(url);
-        Document doc = Jsoup.parse(html);
+            Page page = context.newPage();
+            String url = "https://www.flashscore.co.uk/match/" + md.matchId + "/#/match-summary";
 
-        // 1. Takım İsimleri (Alternatif seçicilerle daha sağlam hale getirildi)
-        Element homeTeamElem = doc.selectFirst(".duelParticipant__home .participant__participantName, .duelParticipant__home .participant__nm, .duelParticipant__home a[class*='participantLink']");
-        Element awayTeamElem = doc.selectFirst(".duelParticipant__away .participant__participantName, .duelParticipant__away .participant__nm, .duelParticipant__away a[class*='participantLink']");
+            try {
+                page.navigate(url);
 
-        if (homeTeamElem != null) md.homeTeam = homeTeamElem.text().trim();
-        if (awayTeamElem != null) md.awayTeam = awayTeamElem.text().trim();
+                // 1. Gözləmə: Hesab divi görünənə qədər gözlə (Arsenal matçı üçün vacibdir)
+                try {
+                    page.waitForSelector(".detailScore__wrapper", new Page.WaitForSelectorOptions().setTimeout(10000));
+                } catch (Exception ignored) {}
 
-        // 2. Maç Tarihi/Saati
-        Element startTime = doc.selectFirst(".duelParticipant__startTime, .startTime, div[class*='startTime']");
-        if (startTime != null) {
-            md.matchDateTime = startTime.text().trim();
-        }
+                // Səhifənin tam oturması üçün yarım saniyəlik süni pauza
+                page.waitForTimeout(1000);
 
-        // 3. Skorlar (FT Score)
-        // Flashscore bazen skoru ayrı spanlarda, bazen tek bir div içinde tutar
-        Element scoreWrapper = doc.selectFirst(".detailScore__wrapper");
-        if (scoreWrapper != null) {
-            String fullScore = scoreWrapper.text().replace("\n", "").trim();
-            // Eğer "1-0" gibi değilse spanları tek tek birleştir
-            Elements scoreSpans = scoreWrapper.select("span");
-            if (scoreSpans.size() >= 3) {
-                md.ftScore = scoreSpans.get(0).text() + " - " + scoreSpans.get(2).text();
-            } else {
-                md.ftScore = fullScore;
-            }
-        }
+                // 2. Komanda Adları
+                md.homeTeam = page.locator(".duelParticipant__home .participant__participantName").first().innerText().trim();
+                md.awayTeam = page.locator(".duelParticipant__away .participant__participantName").first().innerText().trim();
 
-        // 4. İlk Yarı Skoru (HT Score)
-        // Genelde "1st Half (1 - 0)" şeklinde bir yapıda bulunur
-        Element htElement = doc.selectFirst("span[data-testid='wcl-scores-overline-02'], .detailScore__status .smv__incidentsHeader");
-        if (htElement != null) {
-            String htText = htElement.text().trim();
-            // Sadece parantez içini veya skoru temizle
-            md.htScore = htText.replaceAll("[^0-9\\- ]", "").trim();
-        }
+                // 3. Maç Tarixi
+                Locator startTime = page.locator(".duelParticipant__startTime div").first();
+                if (startTime.count() > 0) md.matchDateTime = startTime.innerText().trim();
 
-        // 5. Ülke ve Lig (Breadcrumb yapısı)
-        // Flashscore'da hiyerarşi: Football > Country > League
-        Elements breadcrumbs = doc.select(".breadcrumb__item, .wcl-breadcrumbItem_8btmf, span[data-testid='wcl-scores-overline-03']");
-        if (breadcrumbs.size() >= 3) {
-            // Genelde index 1 Ülke, index 2 Lig'dir
-            md.country = breadcrumbs.get(1).text().replace(">", "").trim();
-            md.league = breadcrumbs.get(2).text().replace(">", "").trim();
-        } else if (breadcrumbs.size() == 2) {
-            md.league = breadcrumbs.get(1).text().trim();
-        }
-
-        // Eğer hala boşsa Tournament header'a bak (B Planı)
-        if (md.league.equals("-")) {
-            Element tournamentLink = doc.selectFirst(".tournamentHeader__country a");
-            if (tournamentLink != null) {
-                String fullTour = tournamentLink.text();
-                if (fullTour.contains(":")) {
-                    String[] parts = fullTour.split(":");
-                    md.country = parts[0].trim();
-                    md.league = parts[1].trim();
+                // 4. Skorlar (FT Score) - Alternativli
+                Locator scoreWrapper = page.locator(".detailScore__wrapper").first();
+                if (scoreWrapper.count() > 0) {
+                    String scoreText = scoreWrapper.innerText().replaceAll("\\s+", "");
+                    if (scoreText.contains("-")) md.ftScore = scoreText;
                 } else {
-                    md.league = fullTour;
+                    // Əgər wrapper tapılmasa (Arsenal matçı kimi), tək-tək skorları tutmağa çalış
+                    Locator homeS = page.locator(".detailScore__home").first();
+                    Locator awayS = page.locator(".detailScore__away").first();
+                    if (homeS.count() > 0 && awayS.count() > 0) {
+                        md.ftScore = homeS.innerText().trim() + "-" + awayS.innerText().trim();
+                    }
                 }
+
+                // 5. İlk Yarı Skoru (HT Score) - MULTI-METHOD axtarış
+                try {
+                    // Üsul A: Sənin göndərdiyin wcl-header daxilində axtar
+                    Locator htContainer = page.locator("[data-testid='wcl-headerSection-text']");
+                    String foundHt = "-";
+
+                    for(int i=0; i < htContainer.count(); i++) {
+                        String txt = htContainer.nth(i).innerText();
+                        Pattern p = Pattern.compile("(\\d+\\s*-\\s*\\d+)");
+                        Matcher m = p.matcher(txt);
+                        if (m.find()) {
+                            foundHt = m.group(1).trim();
+                            break;
+                        }
+                    }
+
+                    // Üsul B: Əgər hələ də tapılmadısa, Flashscore-un "incidents" başlıqlarına bax
+                    if (foundHt.equals("-")) {
+                        Locator incidentHeaders = page.locator(".smv__incidentsHeader");
+                        for (int i = 0; i < incidentHeaders.count(); i++) {
+                            String txt = incidentHeaders.nth(i).innerText();
+                            if (txt.contains("-") && txt.matches(".*\\d.*")) {
+                                foundHt = txt.replaceAll("[^0-9\\- ]", "").trim();
+                                break;
+                            }
+                        }
+                    }
+                    md.htScore = foundHt;
+                } catch (Exception ignored) {}
+
+                // 6. Ölkə və Liqa
+                Locator breadcrumbs = page.locator(".wcl-breadcrumbItem_8btmf span[data-testid='wcl-scores-overline-03']");
+                if (breadcrumbs.count() >= 3) {
+                    md.country = breadcrumbs.nth(1).innerText().replace(">", "").trim();
+                    md.league = breadcrumbs.nth(2).innerText().replace(">", "").trim();
+                }
+
+            } catch (Exception e) {
+                System.err.println("Playwright Error for " + md.matchId + ": " + e.getMessage());
+            } finally {
+                browser.close();
             }
+        } catch (Exception e) {
+            System.err.println("Playwright System Error: " + e.getMessage());
         }
     }
-
-    // ─── Odds: JSON API ──────────────────────────────────────────────────────
 
     private static void extractOddsFromJson(MatchData md) throws IOException, InterruptedException {
         String url = String.format(ScraperConstants.ODDS_API_URL, md.matchId);
@@ -131,9 +146,6 @@ public class MatchDetailScraper {
         JSONArray oddsList = oddsData.optJSONArray("odds");
         if (oddsList == null) return;
 
-        // Önce eventParticipantId → home/away eşlemesini bul
-        // homeTeam'in participant ID'sini belirlemek için settings'deki ilk odds'a bakıyoruz
-        // Basit yaklaşım: ilk HOME_DRAW_AWAY FULL_TIME'daki ilk odds item = home
         String homeParticipantId = null;
         String awayParticipantId = null;
 
@@ -147,19 +159,15 @@ public class MatchDetailScraper {
                 for (int j = 0; j < items.length(); j++) {
                     JSONObject item = items.getJSONObject(j);
                     if (!item.isNull("eventParticipantId")) {
-                        if (homeParticipantId == null) {
-                            homeParticipantId = item.getString("eventParticipantId");
-                        } else if (awayParticipantId == null
-                                && !item.getString("eventParticipantId").equals(homeParticipantId)) {
+                        if (homeParticipantId == null) homeParticipantId = item.getString("eventParticipantId");
+                        else if (awayParticipantId == null && !item.getString("eventParticipantId").equals(homeParticipantId))
                             awayParticipantId = item.getString("eventParticipantId");
-                        }
                     }
                 }
                 break;
             }
         }
 
-        // Şimdi tüm Bet365 odds'larını işle
         for (int i = 0; i < oddsList.length(); i++) {
             JSONObject entry = oddsList.getJSONObject(i);
             if (entry.getInt("bookmakerId") != ScraperConstants.BET365_ID) continue;
@@ -181,8 +189,6 @@ public class MatchDetailScraper {
         }
     }
 
-    // ─── Scope → Period ──────────────────────────────────────────────────────
-
     private static String scopeToPeriod(String scope) {
         return switch (scope) {
             case "FULL_TIME"    -> "Full Time";
@@ -192,137 +198,77 @@ public class MatchDetailScraper {
         };
     }
 
-    // ─── 1X2 ─────────────────────────────────────────────────────────────────
-
-    private static void processHDA(MatchData md, JSONArray items, String period,
-                                   String homeId, String awayId) {
+    private static void processHDA(MatchData md, JSONArray items, String period, String homeId, String awayId) {
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.getJSONObject(i);
             String val = getValue(item);
             String pid = item.isNull("eventParticipantId") ? null : item.getString("eventParticipantId");
-
-            if (pid == null) {
-                md.oddsMap.put("1x2|" + period + "|Draw", val);
-            } else if (pid.equals(homeId)) {
-                md.oddsMap.put("1x2|" + period + "|Home", val);
-            } else {
-                md.oddsMap.put("1x2|" + period + "|Away", val);
-            }
+            if (pid == null) md.oddsMap.put("1x2|" + period + "|Draw", val);
+            else if (pid.equals(homeId)) md.oddsMap.put("1x2|" + period + "|Home", val);
+            else md.oddsMap.put("1x2|" + period + "|Away", val);
         }
     }
-
-    // ─── Over/Under ──────────────────────────────────────────────────────────
 
     private static void processOU(MatchData md, JSONArray items, String period) {
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.getJSONObject(i);
             if (item.isNull("handicap")) continue;
-
             double threshold = item.getJSONObject("handicap").getDouble("value");
             if (!ScraperConstants.OU_THRESHOLDS.contains(threshold)) continue;
-
             String selection = item.isNull("selection") ? null : item.getString("selection");
             String val = getValue(item);
-
-            if ("OVER".equals(selection)) {
-                md.oddsMap.put("Over/Under|" + period + "|O " + threshold, val);
-            } else if ("UNDER".equals(selection)) {
-                md.oddsMap.put("Over/Under|" + period + "|U " + threshold, val);
-            }
+            if ("OVER".equals(selection)) md.oddsMap.put("Over/Under|" + period + "|O " + threshold, val);
+            else if ("UNDER".equals(selection)) md.oddsMap.put("Over/Under|" + period + "|U " + threshold, val);
         }
     }
-
-    // ─── Both Teams To Score ─────────────────────────────────────────────────
 
     private static void processBTTS(MatchData md, JSONArray items, String period) {
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.getJSONObject(i);
             if (item.isNull("bothTeamsToScore")) continue;
-
             boolean yes = item.getBoolean("bothTeamsToScore");
-            String val = getValue(item);
-            md.oddsMap.put("Both teams|" + period + "|" + (yes ? "Yes" : "No"), val);
+            md.oddsMap.put("Both teams|" + period + "|" + (yes ? "Yes" : "No"), getValue(item));
         }
     }
 
-    // ─── Double Chance ────────────────────────────────────────────────────────
-
-    private static void processDC(MatchData md, JSONArray items, String period,
-                                  String homeId, String awayId) {
-        // DC: 3 item: draw+home (1X), home+away (12), draw+away (X2)
-        // JSON'da: eventParticipantId=null → 12, homeId → 1X, awayId → X2
+    private static void processDC(MatchData md, JSONArray items, String period, String homeId, String awayId) {
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.getJSONObject(i);
             String val = getValue(item);
             String pid = item.isNull("eventParticipantId") ? null : item.getString("eventParticipantId");
-
-            if (pid == null) {
-                md.oddsMap.put("Double chance|" + period + "|12", val);
-            } else if (pid.equals(homeId)) {
-                md.oddsMap.put("Double chance|" + period + "|1X", val);
-            } else {
-                md.oddsMap.put("Double chance|" + period + "|X2", val);
-            }
+            if (pid == null) md.oddsMap.put("Double chance|" + period + "|12", val);
+            else if (pid.equals(homeId)) md.oddsMap.put("Double chance|" + period + "|1X", val);
+            else md.oddsMap.put("Double chance|" + period + "|X2", val);
         }
     }
 
-    // ─── Correct Score ────────────────────────────────────────────────────────
-
     private static void processCS(MatchData md, JSONArray items, String period) {
-        if ("2nd Half".equals(period)) return; // 2. yarı CS yok
-
+        if ("2nd Half".equals(period)) return;
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.getJSONObject(i);
             if (item.isNull("score")) continue;
-
-            String score = item.getString("score").replace(":", ":");
-            // JSON'da "3:1" gibi geliyor, normalize et
-            String normalized = normalizeScore(score);
-
-            if (ScraperConstants.CORRECT_SCORES.contains(normalized)) {
-                md.oddsMap.put("Correct score|" + period + "|" + normalized, getValue(item));
+            String score = item.getString("score").replace(" ", "");
+            if (ScraperConstants.CORRECT_SCORES.contains(score)) {
+                md.oddsMap.put("Correct score|" + period + "|" + score, getValue(item));
             }
         }
     }
 
-    // ─── Yardımcılar ─────────────────────────────────────────────────────────
-
-    /** opening (ilk) oranı döndürür, yoksa "-" */
     private static String getValue(JSONObject item) {
         try {
-            if (!item.isNull("opening")) {
-                return item.getString("opening");
-            }
-            if (!item.isNull("value")) {
-                return item.getString("value");
-            }
+            if (!item.isNull("opening")) return item.getString("opening");
+            if (!item.isNull("value")) return item.getString("value");
         } catch (Exception ignored) {}
         return "-";
     }
-
-    /** JSON skor formatını normalize et: "3:1" → "3:1" */
-    private static String normalizeScore(String raw) {
-        return raw.replace(" ", "");
-    }
-
-    // ─── HTTP GET ─────────────────────────────────────────────────────────────
 
     private static String httpGet(String url) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(20))
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8")
-                .header("Accept-Language", "en-GB,en;q=0.9")
-                .header("Referer", "https://www.flashscore.co.uk/")
-                .GET()
-                .build();
-
+                .GET().build();
         HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            throw new IOException("HTTP " + response.statusCode() + " for: " + url);
-        }
         return response.body();
     }
 }

@@ -53,6 +53,6 @@ public class MatchListScraper {
 
             AppLogger.log(targetDate + " tarihi için " + count + " maç bulundu.");
         }
-        return allMatches.subList(0,10);
+        return allMatches;
     }
 }
