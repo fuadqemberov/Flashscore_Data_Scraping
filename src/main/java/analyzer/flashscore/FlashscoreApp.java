@@ -43,7 +43,7 @@ public class FlashscoreApp extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        primaryStage.setTitle("FlashScore Bet365 Enterprise v3.1 - Pool Edition");
+        primaryStage.setTitle("FlashScore Bet365 Enterprise v4.0 - Ultra API Edition");
 
         Label titleLabel = new Label("FlashScore Bet365 Bot");
         titleLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
@@ -94,7 +94,6 @@ public class FlashscoreApp extends Application {
         primaryStage.setResizable(false);
         primaryStage.setOnCloseRequest(e -> {
             stopTimer();
-            BrowserPool.getInstance().close();
             Platform.exit();
             System.exit(0);
         });
@@ -147,12 +146,12 @@ public class FlashscoreApp extends Application {
                 Platform.runLater(() -> statusLabel.setText("Faz 1: Liste alınıyor..."));
 
                 List<MatchData> pendingMatches;
+                // Playwright sadece listeyi çekerken 1 kere açılır, sonra işi biter ve kapanır.
                 try (Playwright playwright = Playwright.create();
                      Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
                      BrowserContext ctx = browser.newContext();
                      Page page = ctx.newPage()) {
 
-                    // 1. Aşama için Playwright zorunlu (Dinamik JS)
                     pendingMatches = MatchListScraper.collectMatchesForDays(page, daysToProcess);
                 }
 
@@ -167,8 +166,8 @@ public class FlashscoreApp extends Application {
                 }
 
                 AppLogger.log("Bulunan maç: " + pendingMatches.size());
-                AppLogger.log("\n=== FAZ 2: PARALEL TARAMA BAŞLIYOR ===");
-                Platform.runLater(() -> statusLabel.setText("Faz 2: Oranlar çekiliyor..."));
+                AppLogger.log("\n=== FAZ 2: ULTRA HIZLI API TARAMA BAŞLIYOR ===");
+                Platform.runLater(() -> statusLabel.setText("Faz 2: Skorlar ve oranlar API ile çekiliyor..."));
 
                 runParallelScraping(pendingMatches);
 
@@ -194,15 +193,14 @@ public class FlashscoreApp extends Application {
 
     private void runParallelScraping(List<MatchData> matches) {
         int total = matches.size();
-        int maxThreads = ScraperConstants.MAX_CONCURRENT_DRIVERS;
 
-        // Artık PlaywrightThreadFactory'ye ihtiyacımız yok. Standart Thread Pool HTTP istekleri için yeterlidir.
-        ExecutorService executor = Executors.newFixedThreadPool(maxThreads);
+        // Sadece HTTP olduğu için Thread sayısını rahatlıkla arttırabiliriz (Örn: 20 eşzamanlı istek)
+        ExecutorService executor = Executors.newFixedThreadPool(ScraperConstants.MAX_CONCURRENT_DRIVERS);
 
         for (MatchData m : matches) {
             executor.submit(() -> {
                 try {
-                    // MatchDetailScraper artık saf Jsoup ve HTTP Client kullanıyor.
+                    // MatchDetailScraper saf HTTP
                     MatchDetailScraper.scrapeMatch(m);
 
                     resultList.add(m);

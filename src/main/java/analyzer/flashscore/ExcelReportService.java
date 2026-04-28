@@ -10,7 +10,6 @@ import java.util.List;
 
 import static analyzer.flashscore.ScraperConstants.STATIC_COLUMN_KEYS;
 
-
 public class ExcelReportService {
     public static void generateReport(List<MatchData> data, String filename) throws IOException {
         Workbook wb = new XSSFWorkbook();
@@ -22,25 +21,21 @@ public class ExcelReportService {
         altStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
         altStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
-        final int FIXED = 8;
+        final int FIXED = 6; // Ülke ve Lig silindiği için başlangıç kolonu 6'ya düştü
 
         Row grpRow = sheet.createRow(0);
-        setCell(grpRow, 0, "Date/Time", hStyle);
-        sheet.setColumnWidth(0, 18 * 256);
+        setCell(grpRow, 0, "Date", hStyle);
+        sheet.setColumnWidth(0, 15 * 256);
         setCell(grpRow, 1, "Match ID", hStyle);
         sheet.setColumnWidth(1, 14 * 256);
-        setCell(grpRow, 2, "Country", hStyle);
-        sheet.setColumnWidth(2, 15 * 256);
-        setCell(grpRow, 3, "League", hStyle);
-        sheet.setColumnWidth(3, 25 * 256);
-        setCell(grpRow, 4, "Home", hStyle);
-        sheet.setColumnWidth(4, 20 * 256);
-        setCell(grpRow, 5, "Away", hStyle);
-        sheet.setColumnWidth(5, 20 * 256);
-        setCell(grpRow, 6, "FT Score", hStyle);
-        sheet.setColumnWidth(6, 12 * 256);
-        setCell(grpRow, 7, "HT Score", hStyle);
-        sheet.setColumnWidth(7, 12 * 256);
+        setCell(grpRow, 2, "Home", hStyle);
+        sheet.setColumnWidth(2, 20 * 256);
+        setCell(grpRow, 3, "Away", hStyle);
+        sheet.setColumnWidth(3, 20 * 256);
+        setCell(grpRow, 4, "FT Score", hStyle);
+        sheet.setColumnWidth(4, 12 * 256);
+        setCell(grpRow, 5, "HT Score", hStyle);
+        sheet.setColumnWidth(5, 12 * 256);
 
         String lastGrp = "";
         int grpStartCol = FIXED;
@@ -65,14 +60,13 @@ public class ExcelReportService {
         }
 
         Row lblRow = sheet.createRow(1);
-        setCell(lblRow, 0, "Date/Time", hStyle);
+        setCell(lblRow, 0, "Date", hStyle);
         setCell(lblRow, 1, "Match ID", hStyle);
-        setCell(lblRow, 2, "Country", hStyle);
-        setCell(lblRow, 3, "League", hStyle);
-        setCell(lblRow, 4, "Home", hStyle);
-        setCell(lblRow, 5, "Away", hStyle);
-        setCell(lblRow, 6, "FT Score", hStyle);
-        setCell(lblRow, 7, "HT Score", hStyle);
+        setCell(lblRow, 2, "Home", hStyle);
+        setCell(lblRow, 3, "Away", hStyle);
+        setCell(lblRow, 4, "FT Score", hStyle);
+        setCell(lblRow, 5, "HT Score", hStyle);
+
         for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
             String label = STATIC_COLUMN_KEYS.get(i).split("\\|")[2];
             setCell(lblRow, FIXED + i, label, hStyle);
@@ -83,14 +77,12 @@ public class ExcelReportService {
             Row row = sheet.createRow(rowNum);
             CellStyle cs = (rowNum % 2 == 0) ? altStyle : null;
 
-            setCell(row, 0, (md.matchDateTime != null && !md.matchDateTime.equals("-")) ? md.matchDateTime : md.date, cs);
+            setCell(row, 0, md.date, cs);
             setCell(row, 1, md.matchId, cs);
-            setCell(row, 2, md.country, cs);
-            setCell(row, 3, md.league, cs);
-            setCell(row, 4, md.homeTeam, cs);
-            setCell(row, 5, md.awayTeam, cs);
-            setCell(row, 6, md.ftScore, cs);
-            setCell(row, 7, md.htScore, cs);
+            setCell(row, 2, md.homeTeam, cs);
+            setCell(row, 3, md.awayTeam, cs);
+            setCell(row, 4, md.ftScore, cs);
+            setCell(row, 5, md.htScore, cs);
 
             for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
                 String val = md.oddsMap.getOrDefault(STATIC_COLUMN_KEYS.get(i), "-");

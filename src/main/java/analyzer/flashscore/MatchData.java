@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class MatchData {
     public String matchId, homeTeam, awayTeam, date;
-    public String country = "-", league = "-", matchDateTime = "-", ftScore = "-", htScore = "-";
+    public String ftScore = "-", htScore = "-";
     public Map<String, String> oddsMap = new HashMap<>();
 
     public MatchData(String matchId, String homeTeam, String awayTeam, String date) {
@@ -16,6 +16,5 @@ public class MatchData {
     }
 
     public MatchData() {
-
     }
 }

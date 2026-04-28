@@ -3,11 +3,13 @@ package analyzer.flashscore;
 import java.util.*;
 
 public class ScraperConstants {
-    public static final int MAX_CONCURRENT_DRIVERS = 4;
+    // Sadece HTTP Request atılacağı için limit artırıldı (Ultra Fast Mode)
+    public static final int MAX_CONCURRENT_DRIVERS = 10;
+
     public static final String BASE_URL = "https://www.flashscore.co.uk/football/";
     public static final String MATCH_URL_PREFIX = "https://www.flashscore.co.uk/match/football/";
 
-    // JSON odds API - sadece eventId değişiyor
+    // JSON odds API
     public static final String ODDS_API_URL =
             "https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=%s&projectId=5&geoIpCode=AZ&geoIpSubdivisionCode=AZBA";
 
@@ -26,8 +28,6 @@ public class ScraperConstants {
             "4:0", "0:4", "4:1", "1:4", "4:2", "2:4", "4:3", "3:4", "4:4"
     );
 
-    public static final Set<String> MAIN_TAB_TEXTS = new HashSet<>(Arrays.asList(
-            "MATCH", "ODDS", "H2H", "STANDINGS", "TABLE", "DRAW", "STATS", "NEWS"));
     public static final List<String> STATIC_COLUMN_KEYS = new ArrayList<>();
 
     static {

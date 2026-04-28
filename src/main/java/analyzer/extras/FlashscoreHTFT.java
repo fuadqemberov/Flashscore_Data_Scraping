@@ -10,7 +10,7 @@ public class FlashscoreHTFT {
 
     public static void main(String[] args) {
 
-        String matchId = "tQzy4f9T";   // öz matç ID-n ilə dəyişdir
+        String matchId = "vNHjRaYj";   // öz matç ID-n ilə dəyişdir
 
         String url = "https://5.flashscore.ninja/5/x/feed/df_sui_1_" + matchId;
 

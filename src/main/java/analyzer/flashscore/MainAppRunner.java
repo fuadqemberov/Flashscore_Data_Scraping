@@ -20,30 +20,10 @@ public class MainAppRunner {
             List<MatchData> pendingMatches;
 
             try (Playwright pw = Playwright.create();
-                 Browser br = pw.chromium().launch(new BrowserType.LaunchOptions()
-                         .setHeadless(true)
-                         .setChannel("msedge")
-                         .setArgs(List.of(
-                                 "--disable-dev-shm-usage",
-                                 "--no-sandbox",
-                                 "--disable-blink-features=AutomationControlled",
-                                 "--disable-extensions",
-                                 "--disable-background-networking",
-                                 "--disable-sync",
-                                 "--disable-translate",
-                                 "--hide-scrollbars",
-                                 "--metrics-recording-only",
-                                 "--mute-audio",
-                                 "--no-first-run",
-                                 "--safebrowsing-disable-auto-update",
-                                 "--js-flags=--max-old-space-size=512"
-                         )));
+                 Browser br = pw.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
                  BrowserContext ctx = br.newContext(new com.microsoft.playwright.Browser.NewContextOptions()
                          .setJavaScriptEnabled(true));
                  Page page = ctx.newPage()) {
-
-                // Page crash olursa yeniden dene
-                page.onCrash(p -> System.err.println("[WARN] Sayfa çöktü, yeniden deneniyor..."));
 
                 pendingMatches = collectWithRetry(page, br, days);
             }
@@ -55,7 +35,7 @@ public class MainAppRunner {
 
             System.out.println("Toplam " + pendingMatches.size() + " maç bulundu.");
 
-            System.out.println("\n=== FAZ 2: PARALEL TARAMA ===");
+            System.out.println("\n=== FAZ 2: ULTRA HIZLI API PARALEL TARAMA ===");
             runParallelScraping(pendingMatches);
 
             ExcelReportService.generateReport(pendingMatches, "bet365_results.xlsx");
@@ -63,8 +43,6 @@ public class MainAppRunner {
 
         } catch (Exception e) {
             e.printStackTrace();
-        } finally {
-            BrowserPool.getInstance().close();
         }
     }
 
@@ -76,12 +54,7 @@ public class MainAppRunner {
             } catch (Exception e) {
                 System.err.println("[FAZ1 RETRY " + attempt + "/" + maxAttempts + "] " + e.getMessage());
                 if (attempt == maxAttempts) throw e;
-
-                // Çöken page'i kapat, yenisini aç
-                try {
-                    page.close();
-                } catch (Exception ignored) {}
-
+                try { page.close(); } catch (Exception ignored) {}
                 try {
                     Thread.sleep(3000);
                     BrowserContext newCtx = browser.newContext();
@@ -93,13 +66,11 @@ public class MainAppRunner {
     }
 
     private static void runParallelScraping(List<MatchData> matches) {
-        // Artık Playwright arka plan nesneleri oluşturmuyoruz
         ExecutorService executor = Executors.newFixedThreadPool(ScraperConstants.MAX_CONCURRENT_DRIVERS);
 
         for (MatchData m : matches) {
             executor.submit(() -> {
                 try {
-                    // MatchDetailScraper artık sadece MatchData objesi istiyor
                     MatchDetailScraper.scrapeMatch(m);
                     System.out.println("[OK] " + m.homeTeam + " vs " + m.awayTeam);
                 } catch (Exception e) {

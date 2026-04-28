@@ -1,191 +1,186 @@
 package analyzer.flashscore;
 
-import com.microsoft.playwright.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.io.IOException;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MatchDetailScraper {
 
+    // 1. DÜZELTME: HTTP_1_1 zorunlu kılındı. "too many concurrent streams" hatasını kesin çözer.
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
     public static void scrapeMatch(MatchData md) {
-        int maxRetry = 3;
-        for (int attempt = 1; attempt <= maxRetry; attempt++) {
-            try {
-                if (attempt > 1) Thread.sleep(2000 + (long)(Math.random() * 3000));
-
-                // 1. Playwright ilə yalnız əsas məlumatları (Adlar, FT, HT) çək
-                extractMatchWithPlaywright(md);
-
-                // 2. JSON API'dən Bet365 oranlarını çək (Sənin ideal metodun)
-                extractOddsFromJson(md);
-
-                return; // Uğurludursa çıx
-
-            } catch (Exception e) {
-                if (attempt == maxRetry) {
-                    AppLogger.log("   [ERR] " + md.matchId + " -> " + e.getMessage());
-                } else {
-                    AppLogger.log("   [RETRY " + attempt + "/" + maxRetry + "] " + md.matchId);
-                }
-            }
-        }
-    }
-
-    private static void extractMatchWithPlaywright(MatchData md) {
-        try (Playwright playwright = Playwright.create()) {
-            Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
-            BrowserContext context = browser.newContext(new Browser.NewContextOptions()
-                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"));
-
-            Page page = context.newPage();
-            String url = "https://www.flashscore.co.uk/match/" + md.matchId + "/#/match-summary";
-
-            try {
-                page.navigate(url);
-
-                // 1. Gözləmə: Hesab divi görünənə qədər gözlə (Arsenal matçı üçün vacibdir)
-                try {
-                    page.waitForSelector(".detailScore__wrapper", new Page.WaitForSelectorOptions().setTimeout(10000));
-                } catch (Exception ignored) {}
-
-                // Səhifənin tam oturması üçün yarım saniyəlik süni pauza
-                page.waitForTimeout(1000);
-
-                // 2. Komanda Adları
-                md.homeTeam = page.locator(".duelParticipant__home .participant__participantName").first().innerText().trim();
-                md.awayTeam = page.locator(".duelParticipant__away .participant__participantName").first().innerText().trim();
-
-                // 3. Maç Tarixi
-                Locator startTime = page.locator(".duelParticipant__startTime div").first();
-                if (startTime.count() > 0) md.matchDateTime = startTime.innerText().trim();
-
-                // 4. Skorlar (FT Score) - Alternativli
-                Locator scoreWrapper = page.locator(".detailScore__wrapper").first();
-                if (scoreWrapper.count() > 0) {
-                    String scoreText = scoreWrapper.innerText().replaceAll("\\s+", "");
-                    if (scoreText.contains("-")) md.ftScore = scoreText;
-                } else {
-                    // Əgər wrapper tapılmasa (Arsenal matçı kimi), tək-tək skorları tutmağa çalış
-                    Locator homeS = page.locator(".detailScore__home").first();
-                    Locator awayS = page.locator(".detailScore__away").first();
-                    if (homeS.count() > 0 && awayS.count() > 0) {
-                        md.ftScore = homeS.innerText().trim() + "-" + awayS.innerText().trim();
-                    }
-                }
-
-                // 5. İlk Yarı Skoru (HT Score) - MULTI-METHOD axtarış
-                try {
-                    // Üsul A: Sənin göndərdiyin wcl-header daxilində axtar
-                    Locator htContainer = page.locator("[data-testid='wcl-headerSection-text']");
-                    String foundHt = "-";
-
-                    for(int i=0; i < htContainer.count(); i++) {
-                        String txt = htContainer.nth(i).innerText();
-                        Pattern p = Pattern.compile("(\\d+\\s*-\\s*\\d+)");
-                        Matcher m = p.matcher(txt);
-                        if (m.find()) {
-                            foundHt = m.group(1).trim();
-                            break;
-                        }
-                    }
-
-                    // Üsul B: Əgər hələ də tapılmadısa, Flashscore-un "incidents" başlıqlarına bax
-                    if (foundHt.equals("-")) {
-                        Locator incidentHeaders = page.locator(".smv__incidentsHeader");
-                        for (int i = 0; i < incidentHeaders.count(); i++) {
-                            String txt = incidentHeaders.nth(i).innerText();
-                            if (txt.contains("-") && txt.matches(".*\\d.*")) {
-                                foundHt = txt.replaceAll("[^0-9\\- ]", "").trim();
-                                break;
-                            }
-                        }
-                    }
-                    md.htScore = foundHt;
-                } catch (Exception ignored) {}
-
-                // 6. Ölkə və Liqa
-                Locator breadcrumbs = page.locator(".wcl-breadcrumbItem_8btmf span[data-testid='wcl-scores-overline-03']");
-                if (breadcrumbs.count() >= 3) {
-                    md.country = breadcrumbs.nth(1).innerText().replace(">", "").trim();
-                    md.league = breadcrumbs.nth(2).innerText().replace(">", "").trim();
-                }
-
-            } catch (Exception e) {
-                System.err.println("Playwright Error for " + md.matchId + ": " + e.getMessage());
-            } finally {
-                browser.close();
-            }
+        try {
+            extractHTFTFromAPI(md);
+            extractOddsFromJson(md);
         } catch (Exception e) {
-            System.err.println("Playwright System Error: " + e.getMessage());
+            AppLogger.log("   [ERR] " + md.matchId + " -> Hata: " + e.getMessage());
         }
     }
 
-    private static void extractOddsFromJson(MatchData md) throws IOException, InterruptedException {
+    private static void extractHTFTFromAPI(MatchData md) {
+        String url = "https://5.flashscore.ninja/5/x/feed/df_sui_1_" + md.matchId;
+
+        // HT/FT için 3 defa deneme hakkı veriyoruz (Anlık bağlantı kopmalarına karşı)
+        for (int i = 0; i < 3; i++) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .header("Accept", "*/*")
+                        .header("x-fsign", "SW9D1eZo")
+                        .header("Referer", "https://www.flashscore.co.uk/")
+                        .GET()
+                        .build();
+
+                HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() == 200 && response.body() != null) {
+                    parseHTFTImproved(md, response.body());
+                    break; // Başarılıysa döngüden çık
+                } else {
+                    Thread.sleep(1000); // Başarısızsa 1 saniye bekle tekrar dene
+                }
+            } catch (Exception ignored) {
+                try { Thread.sleep(1000); } catch (Exception e) {}
+            }
+        }
+    }
+
+    private static void parseHTFTImproved(MatchData md, String body) {
+        String htHome = "-", htAway = "-";
+        String ftHome = "-", ftAway = "-";
+
+        String[] sections = body.split("~");
+
+        for (String section : sections) {
+            String[] parts = section.split("¬");
+
+            String halfLabel = null;
+            String ig = null, ih = null;
+
+            for (String part : parts) {
+                if (part.startsWith("AC÷")) halfLabel = part.substring(3).trim();
+                else if (part.startsWith("IG÷")) ig = part.substring(3).trim();
+                else if (part.startsWith("IH÷")) ih = part.substring(3).trim();
+            }
+
+            if (halfLabel == null || ig == null || ih == null) continue;
+
+            if (halfLabel.equals("1st Half")) {
+                htHome = ig;
+                htAway = ih;
+            } else if (halfLabel.equals("2nd Half")) {
+                try {
+                    ftHome = String.valueOf(Integer.parseInt(htHome) + Integer.parseInt(ig));
+                    ftAway = String.valueOf(Integer.parseInt(htAway) + Integer.parseInt(ih));
+                } catch (Exception ignored) {
+                    ftHome = ig;
+                    ftAway = ih;
+                }
+            }
+        }
+
+        if (!htHome.equals("-") && !htAway.equals("-")) md.htScore = htHome + "-" + htAway;
+        if (!ftHome.equals("-") && !ftAway.equals("-")) md.ftScore = ftHome + "-" + ftAway;
+    }
+
+    private static void extractOddsFromJson(MatchData md) {
         String url = String.format(ScraperConstants.ODDS_API_URL, md.matchId);
-        String json = httpGet(url);
+        String jsonBody = null;
 
-        JSONObject root = new JSONObject(json);
-        JSONObject data = root.optJSONObject("data");
-        if (data == null) return;
+        // 2. DÜZELTME: Anti-Ban Retry Sistemi (JSON Parse hatasını çözer)
+        for (int i = 0; i < 3; i++) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                        .header("Accept", "application/json") // JSON istediğimizi özellikle belirtiyoruz
+                        .GET().build();
 
-        JSONObject oddsData = data.optJSONObject("findOddsByEventId");
-        if (oddsData == null) return;
+                HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
-        JSONArray oddsList = oddsData.optJSONArray("odds");
-        if (oddsList == null) return;
+                // Kod 200 (OK) ise ve Gelen Metin "{" (JSON objesi) ile başlıyorsa kabul et
+                if (response.statusCode() == 200 && response.body() != null && response.body().trim().startsWith("{")) {
+                    jsonBody = response.body();
+                    break; // Başarılı
+                } else {
+                    // Sunucu bizi blokladı veya HTML gönderdi, 1.5 saniye bekle ve tekrar dene
+                    Thread.sleep(1500);
+                }
+            } catch (Exception ignored) {
+                try { Thread.sleep(1500); } catch (Exception e) {}
+            }
+        }
 
-        String homeParticipantId = null;
-        String awayParticipantId = null;
+        // 3 denemede de JSON alınamadıysa, programın çökmemesi için sessizce çık
+        if (jsonBody == null) {
+            return;
+        }
 
-        for (int i = 0; i < oddsList.length(); i++) {
-            JSONObject entry = oddsList.getJSONObject(i);
-            if (entry.getInt("bookmakerId") == ScraperConstants.BET365_ID
+        try {
+            JSONObject root = new JSONObject(jsonBody);
+            JSONObject data = root.optJSONObject("data");
+            if (data == null) return;
+
+            JSONObject oddsData = data.optJSONObject("findOddsByEventId");
+            if (oddsData == null) return;
+
+            JSONArray oddsList = oddsData.optJSONArray("odds");
+            if (oddsList == null) return;
+
+            String homeParticipantId = null;
+            String awayParticipantId = null;
+
+            for (int i = 0; i < oddsList.length(); i++) {
+                JSONObject entry = oddsList.getJSONObject(i);
+                if (entry.getInt("bookmakerId") == ScraperConstants.BET365_ID
                     && "HOME_DRAW_AWAY".equals(entry.getString("bettingType"))
                     && "FULL_TIME".equals(entry.getString("bettingScope"))) {
 
-                JSONArray items = entry.getJSONArray("odds");
-                for (int j = 0; j < items.length(); j++) {
-                    JSONObject item = items.getJSONObject(j);
-                    if (!item.isNull("eventParticipantId")) {
-                        if (homeParticipantId == null) homeParticipantId = item.getString("eventParticipantId");
-                        else if (awayParticipantId == null && !item.getString("eventParticipantId").equals(homeParticipantId))
-                            awayParticipantId = item.getString("eventParticipantId");
+                    JSONArray items = entry.getJSONArray("odds");
+                    for (int j = 0; j < items.length(); j++) {
+                        JSONObject item = items.getJSONObject(j);
+                        if (!item.isNull("eventParticipantId")) {
+                            if (homeParticipantId == null) homeParticipantId = item.getString("eventParticipantId");
+                            else if (awayParticipantId == null && !item.getString("eventParticipantId").equals(homeParticipantId))
+                                awayParticipantId = item.getString("eventParticipantId");
+                        }
                     }
+                    break;
                 }
-                break;
             }
-        }
 
-        for (int i = 0; i < oddsList.length(); i++) {
-            JSONObject entry = oddsList.getJSONObject(i);
-            if (entry.getInt("bookmakerId") != ScraperConstants.BET365_ID) continue;
+            for (int i = 0; i < oddsList.length(); i++) {
+                JSONObject entry = oddsList.getJSONObject(i);
+                if (entry.getInt("bookmakerId") != ScraperConstants.BET365_ID) continue;
 
-            String bettingType = entry.getString("bettingType");
-            String scope = entry.getString("bettingScope");
-            String period = scopeToPeriod(scope);
-            if (period == null) continue;
+                String bettingType = entry.getString("bettingType");
+                String scope = entry.getString("bettingScope");
+                String period = scopeToPeriod(scope);
+                if (period == null) continue;
 
-            JSONArray items = entry.getJSONArray("odds");
+                JSONArray items = entry.getJSONArray("odds");
 
-            switch (bettingType) {
-                case "HOME_DRAW_AWAY" -> processHDA(md, items, period, homeParticipantId, awayParticipantId);
-                case "OVER_UNDER"     -> processOU(md, items, period);
-                case "BOTH_TEAMS_TO_SCORE" -> processBTTS(md, items, period);
-                case "DOUBLE_CHANCE"  -> processDC(md, items, period, homeParticipantId, awayParticipantId);
-                case "CORRECT_SCORE"  -> processCS(md, items, period);
+                switch (bettingType) {
+                    case "HOME_DRAW_AWAY" -> processHDA(md, items, period, homeParticipantId, awayParticipantId);
+                    case "OVER_UNDER"     -> processOU(md, items, period);
+                    case "BOTH_TEAMS_TO_SCORE" -> processBTTS(md, items, period);
+                    case "DOUBLE_CHANCE"  -> processDC(md, items, period, homeParticipantId, awayParticipantId);
+                    case "CORRECT_SCORE"  -> processCS(md, items, period);
+                }
             }
+        } catch (Exception e) {
+            // Sadece logla, uygulamayı patlatma
         }
     }
 
@@ -260,15 +255,5 @@ public class MatchDetailScraper {
             if (!item.isNull("value")) return item.getString("value");
         } catch (Exception ignored) {}
         return "-";
-    }
-
-    private static String httpGet(String url) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(20))
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .GET().build();
-        HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
-        return response.body();
     }
 }
