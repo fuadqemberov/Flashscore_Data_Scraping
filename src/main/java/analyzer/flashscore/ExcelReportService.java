@@ -21,7 +21,7 @@ public class ExcelReportService {
         altStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
         altStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
-        final int FIXED = 6; // Ülke ve Lig silindiği için başlangıç kolonu 6'ya düştü
+        final int FIXED = 6;
 
         Row grpRow = sheet.createRow(0);
         setCell(grpRow, 0, "Date", hStyle);
@@ -74,6 +74,13 @@ public class ExcelReportService {
 
         int rowNum = 2;
         for (MatchData md : data) {
+
+            // YENİ EKLENEN KOD: Eğer bu maçın Bet365 oranı yoksa (oddsMap boşsa),
+            // bu maçı Excel'e ekleme, direkt atla (skip).
+            if (md.oddsMap.isEmpty()) {
+                continue;
+            }
+
             Row row = sheet.createRow(rowNum);
             CellStyle cs = (rowNum % 2 == 0) ? altStyle : null;
 
@@ -98,7 +105,10 @@ public class ExcelReportService {
             throw new RuntimeException(e);
         }
         wb.close();
-        System.out.println("Toplam " + (rowNum - 2) + " mac, " + STATIC_COLUMN_KEYS.size() + " sutun yazildi.");
+
+        // Logda kaç tane maçın Excel'e başarıyla yazıldığını gösterecek.
+        // Örneğin: Tarama 130 maç buldu, ama Excel'e 45 maç yazıldı diyecek.
+        AppLogger.log("Excel'e sadece oranları olan toplam " + (rowNum - 2) + " maç yazıldı.");
     }
 
     static CellStyle makeStyle(Workbook wb, IndexedColors bg, IndexedColors fg, boolean bold) {

@@ -43,7 +43,7 @@ public class FlashscoreApp extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        primaryStage.setTitle("FlashScore Bet365 Enterprise v4.0 - Ultra API Edition");
+        primaryStage.setTitle("FlashScore Bet365 Enterprise v4.1 - Auto Desktop Edition");
 
         Label titleLabel = new Label("FlashScore Bet365 Bot");
         titleLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
@@ -60,6 +60,14 @@ public class FlashscoreApp extends Application {
         pathField = new TextField();
         pathField.setEditable(false);
         pathField.setPrefWidth(280);
+
+        // --- YENİ EKLENEN KISIM: Otomatik Masaüstü Seçimi ---
+        String userHome = System.getProperty("user.home");
+        File desktopPath = new File(userHome, "Desktop");
+        selectedSaveFile = new File(desktopPath, "bet365.xlsx");
+        pathField.setText(selectedSaveFile.getAbsolutePath());
+        // ---------------------------------------------------
+
         Button browseBtn = new Button("Gözat...");
         browseBtn.setOnAction(e -> selectSaveLocation(primaryStage));
         fileBox.getChildren().addAll(new Label("Kaydedilecek Yer:"), pathField, browseBtn);
@@ -118,6 +126,15 @@ public class FlashscoreApp extends Application {
     private void selectSaveLocation(Stage s) {
         FileChooser fc = new FileChooser();
         fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Excel", "*.xlsx"));
+
+        // Eğer seçili bir dosya varsa (Örn: Default masaüstü), o klasörü aç ve ismi hazırla
+        if (selectedSaveFile != null && selectedSaveFile.getParentFile().exists()) {
+            fc.setInitialDirectory(selectedSaveFile.getParentFile());
+            fc.setInitialFileName(selectedSaveFile.getName());
+        } else {
+            fc.setInitialFileName("bet365.xlsx");
+        }
+
         File f = fc.showSaveDialog(s);
         if (f != null) {
             selectedSaveFile = f;
@@ -146,7 +163,6 @@ public class FlashscoreApp extends Application {
                 Platform.runLater(() -> statusLabel.setText("Faz 1: Liste alınıyor..."));
 
                 List<MatchData> pendingMatches;
-                // Playwright sadece listeyi çekerken 1 kere açılır, sonra işi biter ve kapanır.
                 try (Playwright playwright = Playwright.create();
                      Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
                      BrowserContext ctx = browser.newContext();
@@ -194,13 +210,11 @@ public class FlashscoreApp extends Application {
     private void runParallelScraping(List<MatchData> matches) {
         int total = matches.size();
 
-        // Sadece HTTP olduğu için Thread sayısını rahatlıkla arttırabiliriz (Örn: 20 eşzamanlı istek)
         ExecutorService executor = Executors.newFixedThreadPool(ScraperConstants.MAX_CONCURRENT_DRIVERS);
 
         for (MatchData m : matches) {
             executor.submit(() -> {
                 try {
-                    // MatchDetailScraper saf HTTP
                     MatchDetailScraper.scrapeMatch(m);
 
                     resultList.add(m);
