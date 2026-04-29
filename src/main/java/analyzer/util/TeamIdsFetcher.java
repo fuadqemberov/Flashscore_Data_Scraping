@@ -1,13 +1,14 @@
 package analyzer.util;
 
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,10 +20,9 @@ public class TeamIdsFetcher {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
+    public static List<String> fetchUnstartedTeamIds() {
+        Set<String> teamIds = new HashSet<>();
 
-
-    public static List<String> fetchMatchIdsFromAPI() {
-        List<String> ids = new ArrayList<>();
         try {
             String apiUrl = "https://vd.mackolik.com/livedata?group=0";
             HttpRequest request = HttpRequest.newBuilder()
@@ -30,17 +30,26 @@ public class TeamIdsFetcher {
                     .header("User-Agent", USER_AGENT)
                     .GET()
                     .build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-            Pattern p = Pattern.compile("\\[(\\d{7}),");
-            Matcher m = p.matcher(response.body());
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            String body = response.body();
+            int mIndex = body.indexOf("\"m\":[[");
+            if (mIndex == -1) return new ArrayList<>();
+            String matchesPart = body.substring(mIndex);
+            Pattern p = Pattern.compile("\\[\\d+,(\\d+),\"[^\"]*\",(\\d+),\"[^\"]*\",0,\"\",");
+            Matcher m = p.matcher(matchesPart);
+
             while (m.find()) {
-                ids.add(m.group(1));
+                teamIds.add(m.group(1)); // Ev sahibi ID
+                teamIds.add(m.group(2)); // Deplasman ID
             }
-            System.out.println("Toplam " + ids.size() + " adet maç ID'si bulundu.");
+
+            System.out.println("Başlamamış maçlardan toplam " + teamIds.size() + " adet benzersiz Takım ID'si alındı.");
+
         } catch (Exception e) {
             System.err.println("❌ API Hatası: " + e.getMessage());
         }
-        return ids;
+        return new ArrayList<>(teamIds);
     }
+
 }

@@ -1,6 +1,6 @@
 package analyzer.mackolik.triplepattern;
 
-import analyzer.mackolik.patternfinder.TeamIdFinder;
+import analyzer.util.TeamIdsFetcher;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
@@ -92,14 +92,7 @@ public class HttpTripleMatchPatternAnalyzer {
     }
 
     public static void main(String[] args) {
-        List<String> teamIds;
-        try {
-            teamIds = TeamIdFinder.readIdsFromFile();
-            log.info("Loaded {} team IDs.", teamIds.size());
-        } catch (IOException e) {
-            log.error("Failed to read team IDs file: {}", e.getMessage(), e);
-            return;
-        }
+        List<String> teamIds = TeamIdsFetcher.fetchUnstartedTeamIds();
 
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         cm.setMaxTotal(NUM_THREADS + 5);

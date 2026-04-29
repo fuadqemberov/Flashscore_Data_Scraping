@@ -1,5 +1,6 @@
 package analyzer.mackolik.patternfinder;
 
+import analyzer.util.TeamIdsFetcher;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
@@ -98,16 +99,7 @@ public class OnlyLeagueAnalyzer {
     }
 
     public static void main(String[] args) {
-        List<String> teamIds;
-        try {
-            // Ensure TeamIdFinder provides the correct path
-            teamIds = TeamIdFinder.readIdsFromFile(); // Use your existing method
-            log.info("Loaded {} team IDs.", teamIds.size());
-        } catch (IOException e) {
-            log.error("Failed to read team IDs file: {}", e.getMessage(), e);
-            return;
-        }
-
+        List<String> teamIds = TeamIdsFetcher.fetchUnstartedTeamIds();
         // Configure connection pooling for HttpClient
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         cm.setMaxTotal(NUM_THREADS + 5); // Max total connections
@@ -121,7 +113,6 @@ public class OnlyLeagueAnalyzer {
         ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
         List<Future<String>> futures = new ArrayList<>();
 
-        // Submit tasks for each team ID
         for (String idStr : teamIds) {
             try {
                 int teamId = Integer.parseInt(idStr.trim());

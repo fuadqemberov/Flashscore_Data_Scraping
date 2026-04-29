@@ -1,6 +1,6 @@
 package analyzer.mackolik.multiversion;
 
-import analyzer.mackolik.patternfinder.TeamIdFinder;
+import analyzer.util.TeamIdsFetcher;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
+
+
 
 public class MultiVersionAnalyzer {
 
@@ -199,18 +201,13 @@ public class MultiVersionAnalyzer {
     // Ana metod: Virtual Thread tabanlı çalıştırma
     // =============================================
     public static void main(String[] args) {
-        List<String> teamIds;
-        try {
-            teamIds = readTeamIdsFromFile("team_ids.txt");
+        List<String> teamIds = TeamIdsFetcher.fetchUnstartedTeamIds();
             if (teamIds.isEmpty()) {
                 log.warn("No team IDs found. Exiting.");
                 return;
             }
             log.info("Loaded {} team IDs for multi-version analysis.", teamIds.size());
-        } catch (IOException e) {
-            log.error("Failed to read team IDs: {}", e.getMessage(), e);
-            return;
-        }
+
 
         RequestConfig requestConfig = RequestConfig.custom()
                 .setConnectTimeout(10000)
@@ -280,7 +277,4 @@ public class MultiVersionAnalyzer {
         }
     }
 
-    public static List<String> readTeamIdsFromFile(String filePath) throws IOException {
-        return TeamIdFinder.readIdsFromFile();
-    }
 }

@@ -1,5 +1,6 @@
 package analyzer.mackolik.patternfinder;// HttpClient v4 importları (HttpScoreScraper ile uyumlu)
 
+import analyzer.util.TeamIdsFetcher;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
@@ -101,18 +102,13 @@ public class OnlyLeagueVirtualThreadedAnalyzer {
     }
 
     public static void main(String[] args) {
-        List<String> teamIds;
-        try {
-            teamIds = TeamIdFinder.readIdsFromFile();
+        List<String> teamIds = TeamIdsFetcher.fetchUnstartedTeamIds();
             if (teamIds.isEmpty()) {
                 LOGGER.warn("Team IDs file is empty. Exiting.");
                 return;
             }
             LOGGER.info("Loaded {} team IDs to process.", teamIds.size());
-        } catch (IOException e) {
-            LOGGER.error("Failed to read team IDs file.", e);
-            return;
-        }
+
 
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         cm.setMaxTotal(CONNECTION_POOL_SIZE + 10);
