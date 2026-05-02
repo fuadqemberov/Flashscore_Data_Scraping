@@ -79,6 +79,10 @@ public class FlashscoreHttpClient implements AutoCloseable {
         }
     }
 
+    /**
+     * Sadece sayfayı yükler ve HTML döndürür.
+     * Ülke, lig, arşiv sayfaları için kullanılır — maç döngüsü YOKTUR.
+     */
     public String getHtml(String url) throws Exception {
         rateLimiter.acquire();
         try {
@@ -100,7 +104,42 @@ public class FlashscoreHttpClient implements AutoCloseable {
                 if (cookieBtn.isVisible()) { cookieBtn.click(); page.waitForTimeout(500); }
             } catch (Exception ignored) {}
 
-            // İlk yükleme için bekle
+            page.waitForTimeout(2000);
+
+            String html = page.content();
+            page.close();
+            context.close();
+            return html;
+        } finally {
+            rateLimiter.release();
+        }
+    }
+
+    /**
+     * Sonuç sayfalarını yükler — "Show more matches" döngüsü ile tüm maçları bekler.
+     * Sadece /results/ URL'leri için kullanılır.
+     */
+    public String getHtmlWithMatches(String url) throws Exception {
+        rateLimiter.acquire();
+        try {
+            var context = browser.newContext(new com.microsoft.playwright.Browser.NewContextOptions()
+                    .setUserAgent(FlashscoreConfig.USER_AGENT));
+            var page = context.newPage();
+            page.setDefaultTimeout(60000);
+
+            try {
+                page.navigate(url, new Page.NavigateOptions().setTimeout(60000));
+            } catch (PlaywrightException e) {
+                page.close(); context.close();
+                throw new RuntimeException("Bağlantı başarısız: " + url, e);
+            }
+
+            // Çerezleri kapat
+            try {
+                var cookieBtn = page.locator("#onetrust-accept-btn-handler");
+                if (cookieBtn.isVisible()) { cookieBtn.click(); page.waitForTimeout(500); }
+            } catch (Exception ignored) {}
+
             page.waitForTimeout(2000);
 
             int prevCount = 0;
@@ -118,7 +157,6 @@ public class FlashscoreHttpClient implements AutoCloseable {
                     System.out.print("\r⏳ Maçlar yükleniyor... " + currentCount + " maç bulundu");
                 } else {
                     if (clickedLastRound) {
-                        // Tıklama etkisi gecikmiş olabilir, daha uzun bekle
                         page.waitForTimeout(2000);
                         clickedLastRound = false;
                         continue;
@@ -127,13 +165,11 @@ public class FlashscoreHttpClient implements AutoCloseable {
                     if (staleRounds >= MAX_STALE) break;
                 }
 
-                // Sayfayı en alta kaydır
                 page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)");
                 page.waitForTimeout(500);
 
                 boolean clicked = false;
 
-                // Ana selector: button elementi (NOT <a>!)
                 try {
                     Locator btn = page.locator("button[data-testid='wcl-buttonLink']").last();
                     if (btn.count() > 0 && btn.isVisible()) {
@@ -144,7 +180,6 @@ public class FlashscoreHttpClient implements AutoCloseable {
                     }
                 } catch (Exception ignored) {}
 
-                // Yedek selector 1: metne göre button
                 if (!clicked) {
                     try {
                         Locator textBtn = page.locator("button:has-text('Show more matches')").last();
@@ -157,7 +192,6 @@ public class FlashscoreHttpClient implements AutoCloseable {
                     } catch (Exception ignored) {}
                 }
 
-                // Yedek selector 2: wcl-section-footer içindeki buton
                 if (!clicked) {
                     try {
                         Locator footerBtn = page.locator("[data-testid='wcl-section-footer'] button").last();
@@ -184,7 +218,6 @@ public class FlashscoreHttpClient implements AutoCloseable {
             String html = page.content();
             page.close();
             context.close();
-
             return html;
         } finally {
             rateLimiter.release();

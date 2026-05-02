@@ -1,5 +1,7 @@
 package analyzer.fs;
 
+import analyzer.fs.model.Country;
+import analyzer.fs.model.League;
 import analyzer.fs.model.Season;
 import analyzer.fs.scraper.FlashscoreHttpClient;
 import analyzer.fs.util.FlashscoreConfig;
@@ -35,9 +37,7 @@ public class Main {
         String choice = scanner.nextLine().trim();
 
         switch (choice) {
-            case "1" -> {
-                System.out.println("⚠️ Bu özellik çok uzun sürer. Lütfen [2] ile tek lig çekin.");
-            }
+            case "1" -> scrapeAllLeaguesInteractive(scanner);
             case "2" -> scrapeLeagueInteractive(scanner);
             case "3" -> listCountries();
             default  -> System.out.println("❌ Geçersiz seçim!");
@@ -52,6 +52,168 @@ public class Main {
             countries.forEach(c -> System.out.println("  • " + c.code() + " — " + c.name()));
         } catch (Exception e) {
             System.err.println("❌ HATA: " + e.getMessage());
+        }
+    }
+
+    private static void scrapeAllLeaguesInteractive(Scanner scanner) {
+
+        // ── Kaç sezon? ──────────────────────────────────────────────────────────
+        int howMany;
+        while (true) {
+            System.out.print("📅 Her lig için kaç sezon çekilsin? (1 = sadece güncel): ");
+            System.out.flush();
+            String input = scanner.nextLine().trim();
+            if (input.isEmpty()) input = "1";
+            try {
+                howMany = Integer.parseInt(input);
+                if (howMany >= 1) break;
+                System.out.println("   ⚠️  En az 1 olmalı.");
+            } catch (NumberFormatException e) {
+                System.out.println("   ⚠️  Geçersiz giriş, lütfen bir sayı yazın.");
+            }
+        }
+        final int seasonLimit = howMany;
+
+        List<MatchData> globalMatches = new ArrayList<>();
+
+        try (FlashscoreHttpClient client = new FlashscoreHttpClient()) {
+
+            // ── 1. Ülkeleri çek ─────────────────────────────────────────────────
+            System.out.println("\n🌍 Ülkeler çekiliyor...");
+            System.out.flush();
+            String footballHtml = client.getHtml(FlashscoreConfig.DOMAIN + "/football/");
+            List<Country> countries = FlashscoreParser.parseCountries(footballHtml);
+            System.out.println("✅ " + countries.size() + " ülke bulundu.");
+
+            int totalLeaguesProcessed = 0;
+
+            // ── 2. Her ülke için ligleri çek, her lig için maçları çek ──────────
+            for (int ci = 0; ci < countries.size(); ci++) {
+                Country country = countries.get(ci);
+                System.out.println("\n══════════════════════════════════════════════════");
+                System.out.printf("🌍 [%d/%d] Ülke: %s%n", ci + 1, countries.size(), country.name());
+
+                // Ülke sayfasından ligleri parse et
+                List<League> leagues;
+                try {
+                    String countryHtml = client.getHtml(country.url());
+                    leagues = FlashscoreParser.parseLeagues(countryHtml, country.code());
+                } catch (Exception e) {
+                    System.out.println("   ⚠️  Ülke sayfası yüklenemedi, geçiliyor: " + e.getMessage());
+                    continue;
+                }
+
+                if (leagues.isEmpty()) {
+                    System.out.println("   ℹ️  Bu ülkede lig bulunamadı.");
+                    continue;
+                }
+                System.out.println("   ⚽ " + leagues.size() + " lig bulundu.");
+
+                // ── 3. Her lig için sezonları çek ve maçları al ─────────────────
+                for (int li = 0; li < leagues.size(); li++) {
+                    League league = leagues.get(li);
+                    totalLeaguesProcessed++;
+                    System.out.printf("\n   📋 [Lig %d/%d] %s%n", li + 1, leagues.size(), league.name());
+
+                    // Arşiv sayfasından sezonları çek
+                    List<Season> seasons;
+                    try {
+                        String archiveUrl = league.url() + "archive/";
+                        String archiveHtml = client.getHtmlWithSeasonDropdown(archiveUrl);
+                        seasons = FlashscoreParser.parseSeasons(archiveHtml, league.slug(), league.url());
+                    } catch (Exception e) {
+                        System.out.println("      ⚠️  Sezon listesi alınamadı, geçiliyor: " + e.getMessage());
+                        continue;
+                    }
+
+                    if (seasons.isEmpty()) {
+                        System.out.println("      ℹ️  Sezon bulunamadı.");
+                        continue;
+                    }
+
+                    // Kaç sezon çekileceğini belirle
+                    int actualLimit = Math.min(seasonLimit, seasons.size());
+                    List<Season> targetSeasons = seasons.subList(0, actualLimit);
+
+                    System.out.printf("      📅 %d sezon çekilecek (mevcut: %d)%n", actualLimit, seasons.size());
+
+                    List<MatchData> leagueMatches = new ArrayList<>();
+
+                    for (int si = 0; si < targetSeasons.size(); si++) {
+                        Season season = targetSeasons.get(si);
+                        System.out.printf("      ⏳ [%d/%d] Sezon: %s%n", si + 1, targetSeasons.size(), season.name());
+                        System.out.flush();
+
+                        try {
+                            String seasonUrl = season.url() + "results/";
+                            String seasonHtml = client.getHtmlWithMatches(seasonUrl);
+                            List<MatchData> seasonMatches = FlashscoreParser.parseMatchDataFromResultsHtml(
+                                    seasonHtml, season.id(), league.slug(), country.code());
+                            System.out.printf("         ⚽ %d maç bulundu%n", seasonMatches.size());
+                            leagueMatches.addAll(seasonMatches);
+                        } catch (Exception e) {
+                            System.out.println("         ⚠️  Sezon çekilemedi: " + e.getMessage());
+                        }
+                    }
+
+                    if (leagueMatches.isEmpty()) {
+                        System.out.println("      ℹ️  Bu lig için maç bulunamadı.");
+                        continue;
+                    }
+
+                    // ── 4. Oranları ve detayları çek (sanal thread'lerle) ────────
+                    System.out.printf("      💰 %d maç için detay/oran çekiliyor...%n", leagueMatches.size());
+                    System.out.flush();
+
+                    var executor = Executors.newVirtualThreadPerTaskExecutor();
+                    AtomicInteger processed = new AtomicInteger(0);
+                    var futures = new ArrayList<java.util.concurrent.Future<?>>();
+
+                    for (MatchData md : leagueMatches) {
+                        futures.add(executor.submit(() -> {
+                            MatchDetailScraper.scrapeMatch(md);
+                            int done = processed.incrementAndGet();
+                            if (done % 100 == 0 || done == leagueMatches.size()) {
+                                long oddsCount = leagueMatches.stream()
+                                        .filter(m -> !m.oddsMap.isEmpty()).count();
+                                System.out.printf("         ✅ %d/%d | Oranlı: %d%n",
+                                        done, leagueMatches.size(), oddsCount);
+                                System.out.flush();
+                            }
+                        }));
+                    }
+
+                    for (var f : futures) f.get();
+                    executor.shutdown();
+                    executor.awaitTermination(10, TimeUnit.MINUTES);
+
+                    globalMatches.addAll(leagueMatches);
+                    System.out.printf("      ✅ Lig tamamlandı. Toplam biriken maç: %d%n", globalMatches.size());
+                }
+            }
+
+            // ── 5. Tek Excel'e yaz ───────────────────────────────────────────────
+            System.out.println("\n╔════════════════════════════════════════════════════════════╗");
+            System.out.println("║                     ✅ TAMAMLANDI                          ║");
+            System.out.println("╚════════════════════════════════════════════════════════════╝");
+            System.out.printf("📊 Toplam lig işlendi : %d%n", totalLeaguesProcessed);
+            System.out.printf("⚽ Toplam maç çekildi : %d%n", globalMatches.size());
+            long withOdds = globalMatches.stream().filter(m -> !m.oddsMap.isEmpty()).count();
+            System.out.printf("💰 Oranlı maç        : %d%n", withOdds);
+
+            if (!globalMatches.isEmpty()) {
+                String filename = "all_leagues_" + seasonLimit + "season_" + timestamp() + ".xlsx";
+                System.out.printf("%n📊 Excel'e aktarılıyor → %s%n", filename);
+                System.out.flush();
+                ExcelReportService.generateReport(globalMatches, filename);
+                System.out.println("🎉 Kaydedildi: " + filename);
+            } else {
+                System.out.println("❌ Hiç maç bulunamadı, Excel oluşturulmadı.");
+            }
+
+        } catch (Exception e) {
+            System.err.println("❌ HATA: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -125,7 +287,7 @@ public class Main {
                 System.out.println("🔗 URL: " + seasonUrl);
                 System.out.flush();
 
-                String seasonHtml = client.getHtml(seasonUrl);
+                String seasonHtml = client.getHtmlWithMatches(seasonUrl);
                 System.out.println("📄 HTML: " + seasonHtml.length() + " karakter");
 
                 List<MatchData> seasonMatches = FlashscoreParser.parseMatchDataFromResultsHtml(

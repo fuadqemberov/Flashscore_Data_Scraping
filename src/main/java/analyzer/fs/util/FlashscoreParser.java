@@ -34,15 +34,36 @@ public class FlashscoreParser {
 
     public static List<League> parseLeagues(String html, String countryCode) {
         List<League> leagues = new ArrayList<>();
-        Matcher m = LEAGUE_PATTERN.matcher(html);
-        while (m.find()) {
-            String slug = m.group(1);
-            String name = cleanText(m.group(2));
-            if (!slug.isEmpty() && !name.isEmpty()) {
-                String id = slug.replaceAll("[^a-zA-Z0-9]", "-");
-                leagues.add(new League(id, name, countryCode,
-                        FlashscoreConfig.DOMAIN + "/football/" + countryCode + "/" + slug + "/", slug));
-            }
+        Document doc = Jsoup.parse(html);
+        Set<String> seenSlugs = new LinkedHashSet<>();
+
+        // Flashscore'da ligler: /football/{countryCode}/{slug}/ formatındaki linkler
+        // Sadece tam olarak 4 segment olan linkleri al (alt sayfa değil)
+        Elements links = doc.select("a[href^='/football/" + countryCode + "/']");
+
+        // Navigasyon/sistem slug'larını filtrele
+        Set<String> BLACKLIST = Set.of("archive", "results", "standings", "draw",
+                "summary", "h2h", "odds", "lineups", "live", "fixtures", "tables");
+
+        for (Element link : links) {
+            String href = link.attr("href"); // örn: /football/albania/superliga/
+            // Tam olarak /football/countryCode/slug/ veya /football/countryCode/slug formatı
+            String stripped = href.replaceAll("/$", ""); // sondaki slash'ı kaldır
+            String[] parts = stripped.split("/");
+            // ["", "football", "albania", "superliga"] → 4 parça olmalı
+            if (parts.length != 4) continue;
+
+            String slug = parts[3];
+            if (slug.isBlank() || BLACKLIST.contains(slug)) continue;
+            if (seenSlugs.contains(slug)) continue;
+            seenSlugs.add(slug);
+
+            String name = link.text().trim();
+            if (name.isEmpty()) continue;
+
+            String id = slug.replaceAll("[^a-zA-Z0-9]", "-");
+            leagues.add(new League(id, name, countryCode,
+                    FlashscoreConfig.DOMAIN + "/football/" + countryCode + "/" + slug + "/", slug));
         }
         return leagues;
     }
