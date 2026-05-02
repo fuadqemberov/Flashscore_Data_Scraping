@@ -47,18 +47,9 @@ public class FlashscoreParser {
         return leagues;
     }
 
+    // ARŞİV MANTIĞI - Düzeltilmiş Sezon Parser (Çift sezon veya 2025 hatası yok)
     public static List<Season> parseSeasons(String html, String leagueSlug, String leagueUrl) {
         List<Season> seasons = new ArrayList<>();
-
-        // 1. GÜNCEL SEZONU (2025/2026) EN BAŞA MANUEL EKLE
-        String currentSeasonUrl = leagueUrl.replace("archive/", ""); // archive silinince ana sayfa kalır
-        int currentYear = java.time.Year.now().getValue();
-        int startYear = java.time.LocalDate.now().getMonthValue() >= 7 ? currentYear : currentYear - 1;
-        String currentSeasonName = "Current Season (" + startYear + "/" + (startYear + 1) + ")";
-
-        seasons.add(new Season("current", currentSeasonName, leagueSlug, currentSeasonUrl));
-
-        // 2. ARŞİVDEKİ DİĞER SEZONLARI EKLE
         Document doc = Jsoup.parse(html);
         Elements links = doc.select("a[href*='" + leagueSlug + "']");
         Set<String> seenYears = new LinkedHashSet<>();
@@ -82,6 +73,13 @@ public class FlashscoreParser {
                 }
             }
         }
+
+        // Eğer hiçbir sezon bulunamazsa (Sayfa yüklenemediyse vs.) ana sayfayı varsayılan olarak ekle
+        if (seasons.isEmpty()) {
+            String currentSeasonUrl = leagueUrl.replace("archive/", "");
+            seasons.add(new Season("current", "Current Season", leagueSlug, currentSeasonUrl));
+        }
+
         return seasons;
     }
 
@@ -135,7 +133,8 @@ public class FlashscoreParser {
     }
 
     public static String parseFsignToken(String html) {
-        return FlashscoreConfig.DEFAULT_FSIGN;
+        Matcher m = FSIGN_PATTERN.matcher(html);
+        return m.find() ? m.group(1) : FlashscoreConfig.DEFAULT_FSIGN;
     }
 
     private static String cleanText(String text) {

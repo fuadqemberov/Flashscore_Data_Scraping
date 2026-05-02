@@ -36,7 +36,6 @@ public class FlashscoreHttpClient implements AutoCloseable {
         this.fsignToken = fetchFsignFromBrowser();
     }
 
-    // YANLIŞLIKLA SİLİNEN GET METOTLARI GERİ EKLENDİ
     public String get(String endpoint) throws Exception {
         return get(endpoint, true);
     }
@@ -60,7 +59,6 @@ public class FlashscoreHttpClient implements AutoCloseable {
                     builder.build(), HttpResponse.BodyHandlers.ofString()
             );
 
-            // Token expire olduysa yenile ve tekrar dene
             if (response.statusCode() == 403) {
                 refreshFsignToken();
                 builder.header("X-Fsign", fsignToken);
@@ -96,14 +94,19 @@ public class FlashscoreHttpClient implements AutoCloseable {
                 throw new RuntimeException("Bağlantı başarısız: " + url, e);
             }
 
+            // Çerezleri kapat
             try {
                 var cookieBtn = page.locator("#onetrust-accept-btn-handler");
                 if (cookieBtn.isVisible()) { cookieBtn.click(); page.waitForTimeout(500); }
             } catch (Exception ignored) {}
 
+            // İlk yükleme için bekle
+            page.waitForTimeout(2000);
+
             int prevCount = 0;
             int staleRounds = 0;
-            final int MAX_STALE = 6;
+            final int MAX_STALE = 10;
+            boolean clickedLastRound = false;
 
             while (true) {
                 int currentCount = page.locator("[id^='g_1_']").count();
@@ -111,22 +114,71 @@ public class FlashscoreHttpClient implements AutoCloseable {
                 if (currentCount > prevCount) {
                     staleRounds = 0;
                     prevCount = currentCount;
-                    System.out.print("\r⏳ Maçlar yükleniyor... " + currentCount + " maç");
+                    clickedLastRound = false;
+                    System.out.print("\r⏳ Maçlar yükleniyor... " + currentCount + " maç bulundu");
                 } else {
+                    if (clickedLastRound) {
+                        // Tıklama etkisi gecikmiş olabilir, daha uzun bekle
+                        page.waitForTimeout(2000);
+                        clickedLastRound = false;
+                        continue;
+                    }
                     staleRounds++;
                     if (staleRounds >= MAX_STALE) break;
                 }
 
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-                page.waitForTimeout(1500);
+                // Sayfayı en alta kaydır
+                page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)");
+                page.waitForTimeout(500);
 
-                // YENİ UI SHOW MORE TIKLAYICI
-                tryClickShowMore(page, "a:has-text('Show more matches')");
-                tryClickShowMore(page, "a[data-testid='wcl-buttonLink']");
-                tryClickShowMore(page, ".event__more");
+                boolean clicked = false;
 
-                page.waitForTimeout(1000);
+                // Ana selector: button elementi (NOT <a>!)
+                try {
+                    Locator btn = page.locator("button[data-testid='wcl-buttonLink']").last();
+                    if (btn.count() > 0 && btn.isVisible()) {
+                        btn.scrollIntoViewIfNeeded();
+                        page.waitForTimeout(300);
+                        btn.click(new Locator.ClickOptions().setForce(true));
+                        clicked = true;
+                    }
+                } catch (Exception ignored) {}
+
+                // Yedek selector 1: metne göre button
+                if (!clicked) {
+                    try {
+                        Locator textBtn = page.locator("button:has-text('Show more matches')").last();
+                        if (textBtn.count() > 0 && textBtn.isVisible()) {
+                            textBtn.scrollIntoViewIfNeeded();
+                            page.waitForTimeout(300);
+                            textBtn.click(new Locator.ClickOptions().setForce(true));
+                            clicked = true;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Yedek selector 2: wcl-section-footer içindeki buton
+                if (!clicked) {
+                    try {
+                        Locator footerBtn = page.locator("[data-testid='wcl-section-footer'] button").last();
+                        if (footerBtn.count() > 0 && footerBtn.isVisible()) {
+                            footerBtn.scrollIntoViewIfNeeded();
+                            page.waitForTimeout(300);
+                            footerBtn.click(new Locator.ClickOptions().setForce(true));
+                            clicked = true;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                if (clicked) {
+                    staleRounds = 0;
+                    clickedLastRound = true;
+                    page.waitForTimeout(3000);
+                } else {
+                    page.waitForTimeout(1000);
+                }
             }
+
             System.out.println("\n✅ Tüm maçlar yüklendi. Toplam: " + prevCount + " maç");
 
             String html = page.content();
@@ -157,28 +209,14 @@ public class FlashscoreHttpClient implements AutoCloseable {
         }
     }
 
-    private void tryClickShowMore(Page page, String selector) {
-        try {
-            Locator btn = page.locator(selector).first();
-            if (btn.isVisible()) {
-                btn.click();
-                page.waitForTimeout(500);
-            }
-        } catch (Exception ignored) {}
-    }
-
-    // YANLIŞLIKLA SİLİNEN TOKEN FONKSİYONLARI EKLENDİ
     private void refreshFsignToken() {
         try {
             String html = getHtml(FlashscoreConfig.DOMAIN + "/football/");
             String newToken = FlashscoreParser.parseFsignToken(html);
             if (newToken != null && !newToken.isEmpty()) {
                 this.fsignToken = newToken;
-                System.out.println("\n🔄 Fsign token yenilendi: " + newToken);
             }
-        } catch (Exception e) {
-            System.err.println("Fsign refresh failed: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
     }
 
     public String getFsignToken() {
@@ -203,16 +241,10 @@ public class FlashscoreHttpClient implements AutoCloseable {
                             "  return null; " +
                             "}"
             );
-
             page.close();
             context.close();
-
-            if (token != null && !token.isEmpty()) {
-                return token;
-            }
-        } catch (Exception e) {
-            System.err.println("Fsign fetch hatası: " + e.getMessage());
-        }
+            if (token != null && !token.isEmpty()) return token;
+        } catch (Exception ignored) {}
         return FlashscoreConfig.DEFAULT_FSIGN;
     }
 
