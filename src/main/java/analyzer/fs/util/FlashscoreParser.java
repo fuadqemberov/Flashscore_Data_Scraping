@@ -51,33 +51,61 @@ public class FlashscoreParser {
     public static List<Season> parseSeasons(String html, String leagueSlug, String leagueUrl) {
         List<Season> seasons = new ArrayList<>();
         Document doc = Jsoup.parse(html);
-        Elements links = doc.select("a[href*='" + leagueSlug + "']");
         Set<String> seenYears = new LinkedHashSet<>();
-        Pattern yearPattern = Pattern.compile("-(\\d{4}-\\d{4}|\\d{4})(?:/|$)");
+        Pattern yearPattern = Pattern.compile("-(" + leagueSlug + "-)?(\\d{4}-\\d{4})(?:/|$)");
+
+        // 1. Önce güncel sezonu ekle — yıl suffix'i OLMAYAN link
+        // Örnek: /football/netherlands/eredivisie/results/ veya /football/netherlands/eredivisie/archive/
+        String currentResultsUrl = leagueUrl.replace("archive/", "") + "results/";
+        if (!currentResultsUrl.endsWith("results/")) currentResultsUrl += "results/";
+
+        // Güncel sezon yılını bulmaya çalış (sayfa başlığından veya season_url div'inden)
+        String currentYear = "current";
+        Element seasonUrlEl = doc.getElementById("season_url");
+        if (seasonUrlEl != null) {
+            String val = seasonUrlEl.text().trim(); // örn: "2024-2025"
+            if (!val.isEmpty()) currentYear = val;
+        }
+        // Sayfa title'ından da dene
+        if (currentYear.equals("current")) {
+            String title = doc.title();
+            Matcher tm = Pattern.compile("(\\d{4}/\\d{4}|\\d{4}-\\d{4})").matcher(title);
+            if (tm.find()) currentYear = tm.group(1).replace("/", "-");
+        }
+
+        seasons.add(new Season(currentYear, currentYear.replace("-", "/"), leagueSlug, currentResultsUrl));
+        seenYears.add(currentYear);
+
+        // 2. Eski sezonları arşiv linklerinden çek
+        Elements links = doc.select("a[href*='" + leagueSlug + "-']");
+        Pattern archivePattern = Pattern.compile("/football/[^/]+/" + leagueSlug + "-(\\d{4}-\\d{4})/");
 
         for (Element link : links) {
             String href = link.attr("href");
-            String text = link.text().trim();
-
-            Matcher m = yearPattern.matcher(href);
+            Matcher m = archivePattern.matcher(href);
             if (m.find()) {
-                String yearPart = m.group(1);
-
+                String yearPart = m.group(1); // örn: "2023-2024"
                 if (!seenYears.contains(yearPart)) {
                     seenYears.add(yearPart);
-                    String fullUrl = href.startsWith("http") ? href : FlashscoreConfig.DOMAIN + href;
+                    String fullUrl = (href.startsWith("http") ? href : FlashscoreConfig.DOMAIN + href);
                     if (!fullUrl.endsWith("/")) fullUrl += "/";
-                    if (text.isEmpty()) text = yearPart;
+                    // archive URL'ini results URL'ine çevir
+                    fullUrl = fullUrl.replace("/archive/", "/results/");
+                    if (!fullUrl.contains("/results/")) fullUrl += "results/";
 
-                    seasons.add(new Season(yearPart, text, leagueSlug, fullUrl));
+                    String displayName = yearPart.replace("-", "/");
+                    String text = link.text().trim();
+                    if (!text.isEmpty()) displayName = text;
+
+                    seasons.add(new Season(yearPart, displayName, leagueSlug, fullUrl));
                 }
             }
         }
 
-        // Eğer hiçbir sezon bulunamazsa (Sayfa yüklenemediyse vs.) ana sayfayı varsayılan olarak ekle
+        // 3. Hiçbir şey bulunamazsa fallback
         if (seasons.isEmpty()) {
-            String currentSeasonUrl = leagueUrl.replace("archive/", "");
-            seasons.add(new Season("current", "Current Season", leagueSlug, currentSeasonUrl));
+            seasons.add(new Season("current", "Current Season", leagueSlug,
+                    leagueUrl.replace("archive/", "") + "results/"));
         }
 
         return seasons;
