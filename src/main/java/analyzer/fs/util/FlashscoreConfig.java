@@ -1,4 +1,4 @@
-package analyzer.fs;
+package analyzer.fs.util;
 
 public class FlashscoreConfig {
     public static final String API_BASE = "https://d.flashscore.com/x/feed";

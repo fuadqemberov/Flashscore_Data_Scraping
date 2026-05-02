@@ -1,21 +1,8 @@
 package analyzer.fs.exporter;
 
 
-
-import analyzer.fs.model.Country;
-import analyzer.fs.model.League;
-import analyzer.fs.model.Match;
-import analyzer.fs.model.Odds;
-import analyzer.fs.model.ScrapeResult;
-import analyzer.fs.model.Season;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.FillPatternType;
-import org.apache.poi.ss.usermodel.Font;
-import org.apache.poi.ss.usermodel.IndexedColors;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
+import analyzer.fs.model.*;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.io.FileOutputStream;

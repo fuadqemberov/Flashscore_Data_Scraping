@@ -1,14 +1,10 @@
 package analyzer.fs.scraper;
 
-import analyzer.fs.FlashscoreConfig;
-import analyzer.fs.FlashscoreParser;
-import analyzer.fs.ProgressBar;
-import analyzer.fs.model.Country;
-import analyzer.fs.model.League;
-import analyzer.fs.model.Match;
-import analyzer.fs.model.Odds;
-import analyzer.fs.model.ScrapeResult;
-import analyzer.fs.model.Season;
+
+import analyzer.fs.model.*;
+import analyzer.fs.util.FlashscoreConfig;
+import analyzer.fs.util.FlashscoreParser;
+import analyzer.fs.util.ProgressBar;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -38,21 +34,21 @@ public class FlashscoreScraper implements AutoCloseable {
         System.out.println("⚽ Ligler çekiliyor (" + countries.size() + " ülke)...");
 
         List<CompletableFuture<List<League>>> futures = countries.stream()
-            .map(c -> CompletableFuture.supplyAsync(() -> {
-                try {
-                    String html = httpClient.getHtml(c.url());
-                    return FlashscoreParser.parseLeagues(html, c.code());
-                } catch (Exception e) {
-                    System.err.println("❌ Lig hatası [" + c.code() + "]: " + e.getMessage());
-                    return List.<League>of();
-                }
-            }, executor))
-            .toList();
+                .map(c -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        String html = httpClient.getHtml(c.url());
+                        return FlashscoreParser.parseLeagues(html, c.code());
+                    } catch (Exception e) {
+                        System.err.println("❌ Lig hatası [" + c.code() + "]: " + e.getMessage());
+                        return List.<League>of();
+                    }
+                }, executor))
+                .toList();
 
         List<League> leagues = futures.stream()
-            .map(CompletableFuture::join)
-            .flatMap(List::stream)
-            .collect(Collectors.toList());
+                .map(CompletableFuture::join)
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
 
         System.out.println("✅ " + leagues.size() + " lig bulundu.");
         return leagues;
@@ -63,20 +59,20 @@ public class FlashscoreScraper implements AutoCloseable {
         System.out.println("📅 Sezonlar çekiliyor (" + leagues.size() + " lig)...");
 
         List<CompletableFuture<List<Season>>> futures = leagues.stream()
-            .map(l -> CompletableFuture.supplyAsync(() -> {
-                try {
-                    String html = httpClient.getHtml(l.url());
-                    return FlashscoreParser.parseSeasons(html, l.id(), l.url());
-                } catch (Exception e) {
-                    return List.<Season>of();
-                }
-            }, executor))
-            .toList();
+                .map(l -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        String html = httpClient.getHtml(l.url());
+                        return FlashscoreParser.parseSeasons(html, l.id(), l.url());
+                    } catch (Exception e) {
+                        return List.<Season>of();
+                    }
+                }, executor))
+                .toList();
 
         List<Season> seasons = futures.stream()
-            .map(CompletableFuture::join)
-            .flatMap(List::stream)
-            .collect(Collectors.toList());
+                .map(CompletableFuture::join)
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
 
         System.out.println("✅ " + seasons.size() + " sezon bulundu.");
         return seasons;
@@ -90,19 +86,19 @@ public class FlashscoreScraper implements AutoCloseable {
         ProgressBar pb = new ProgressBar(seasons.size(), "Sezonlar");
 
         List<CompletableFuture<Void>> futures = seasons.stream()
-            .map(s -> CompletableFuture.runAsync(() -> {
-                try {
-                    String html = httpClient.getHtml(s.url() + "results/");
-                    List<String> matchIds = FlashscoreParser.parseMatchIds(html);
-                    List<Match> matches = fetchMatchDetailsBatch(matchIds, s.id(), s.leagueId(), "");
-                    allMatches.addAll(matches);
-                } catch (Exception e) {
-                    // Hata durumunu sessizce geç
-                } finally {
-                    pb.increment();
-                }
-            }, executor))
-            .toList();
+                .map(s -> CompletableFuture.runAsync(() -> {
+                    try {
+                        String html = httpClient.getHtml(s.url() + "results/");
+                        List<String> matchIds = FlashscoreParser.parseMatchIds(html);
+                        List<Match> matches = fetchMatchDetailsBatch(matchIds, s.id(), s.leagueId(), "");
+                        allMatches.addAll(matches);
+                    } catch (Exception e) {
+                        // Hata durumunu sessizce geç
+                    } finally {
+                        pb.increment();
+                    }
+                }, executor))
+                .toList();
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         System.out.println("✅ " + allMatches.size() + " maç bulundu.");
@@ -114,16 +110,16 @@ public class FlashscoreScraper implements AutoCloseable {
         List<Match> matches = Collections.synchronizedList(new ArrayList<>());
 
         List<CompletableFuture<Void>> futures = matchIds.stream()
-            .map(id -> CompletableFuture.runAsync(() -> {
-                try {
-                    String data = httpClient.get("/dc_1_" + id);
-                    Match match = FlashscoreParser.parseMatchDetails(id, data, seasonId, leagueId, countryCode);
-                    if (match != null) matches.add(match);
-                } catch (Exception e) {
-                    // Skip failed
-                }
-            }, executor))
-            .toList();
+                .map(id -> CompletableFuture.runAsync(() -> {
+                    try {
+                        String data = httpClient.get("/dc_1_" + id);
+                        Match match = FlashscoreParser.parseMatchDetails(id, data, seasonId, leagueId, countryCode);
+                        if (match != null) matches.add(match);
+                    } catch (Exception e) {
+                        // Skip failed
+                    }
+                }, executor))
+                .toList();
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         return matches;
@@ -141,18 +137,18 @@ public class FlashscoreScraper implements AutoCloseable {
             List<Match> batch = matches.subList(i, Math.min(i + batchSize, matches.size()));
 
             List<CompletableFuture<Void>> futures = batch.stream()
-                .map(m -> CompletableFuture.runAsync(() -> {
-                    try {
-                        String data = httpClient.get("/df_dos_1_" + m.id());
-                        Odds odds = FlashscoreParser.parseOdds(m.id(), data);
-                        if (odds != null) oddsMap.put(m.id(), odds);
-                    } catch (Exception e) {
-                        // Skip failed
-                    } finally {
-                        pb.increment();
-                    }
-                }, executor))
-                .toList();
+                    .map(m -> CompletableFuture.runAsync(() -> {
+                        try {
+                            String data = httpClient.get("/df_dos_1_" + m.id());
+                            Odds odds = FlashscoreParser.parseOdds(m.id(), data);
+                            if (odds != null) oddsMap.put(m.id(), odds);
+                        } catch (Exception e) {
+                            // Skip failed
+                        } finally {
+                            pb.increment();
+                        }
+                    }, executor))
+                    .toList();
 
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         }
@@ -177,15 +173,25 @@ public class FlashscoreScraper implements AutoCloseable {
         return new ScrapeResult(countries, leagues, seasons, matches, odds);
     }
 
-    // ========== BELİRLİ BİR LİG İÇİN ÇEK ==========
-    public ScrapeResult scrapeLeague(String countryCode, String leagueSlug) throws Exception {
+    // ========== BELİRLİ BİR LİG İÇİN SEZONLARI ÇEK ==========
+    public List<Season> fetchSeasonsForLeague(String countryCode, String leagueSlug) throws Exception {
         String leagueUrl = FlashscoreConfig.DOMAIN + "/football/" + countryCode + "/" + leagueSlug + "/";
         String html = httpClient.getHtml(leagueUrl);
+        return FlashscoreParser.parseSeasons(html, leagueSlug, leagueUrl);
+    }
 
-        List<Season> seasons = FlashscoreParser.parseSeasons(html, leagueSlug, leagueUrl);
+    // ========== BELİRLİ SEZONLARLA LİG ÇEK ==========
+    public ScrapeResult scrapeLeagueWithSeasons(String countryCode, String leagueSlug, List<Season> targetSeasons) throws Exception {
+        List<Match> matches = fetchMatches(targetSeasons);
+        Map<String, Odds> odds = fetchOdds(matches);
+        return new ScrapeResult(List.of(), List.of(), targetSeasons, matches, odds);
+    }
+
+    // ========== BELİRLİ BİR LİG İÇİN ÇEK (tüm sezonlar - eski davranış) ==========
+    public ScrapeResult scrapeLeague(String countryCode, String leagueSlug) throws Exception {
+        List<Season> seasons = fetchSeasonsForLeague(countryCode, leagueSlug);
         List<Match> matches = fetchMatches(seasons);
         Map<String, Odds> odds = fetchOdds(matches);
-
         return new ScrapeResult(List.of(), List.of(), seasons, matches, odds);
     }
 

@@ -1,4 +1,4 @@
-package analyzer.fs;
+package analyzer.fs.util;
 
 public class ProgressBar {
     private final int total;

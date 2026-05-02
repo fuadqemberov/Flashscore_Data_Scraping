@@ -1,10 +1,11 @@
-package analyzer.fs;
+package analyzer.fs.util;
 
-import analyzer.fs.model.Country;
-import analyzer.fs.model.League;
-import analyzer.fs.model.Match;
-import analyzer.fs.model.Odds;
-import analyzer.fs.model.Season;
+import analyzer.fs.MatchData;
+import analyzer.fs.model.*;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -16,14 +17,8 @@ public class FlashscoreParser {
     private static final Pattern COUNTRY_PATTERN = Pattern.compile("href=\"/football/([^/]+)/\"[^>]*>([^<]+)</a>");
     private static final Pattern LEAGUE_PATTERN = Pattern.compile("href=\"/football/[^/]+/([^/]+)/\"[^>]*>([^<]+)</a>");
 
-    // 🔧 DÜZELTİLMİŞ SEZON PATTERN'LERİ (Java'da çalışan hali)
-    private static final Pattern SEASON_PATTERN_1 = Pattern.compile("data-season=\"([^\"]+)\"[^>]*>([^<]+)</a>");
-    private static final Pattern SEASON_PATTERN_2 = Pattern.compile("href=\"[^\"]*(\\d{4}-\\d{4})/\"[^>]*>([^<]+)</a>");
-    private static final Pattern SEASON_PATTERN_3 = Pattern.compile("href=\"[^\"]*(\\d{4})/\"[^>]*>([^<]+)</a>");
-
     private static final Pattern FSIGN_PATTERN = Pattern.compile("feed_sign\":\"([^\"]+)\"");
 
-    // ========== ÜLKELER ==========
     public static List<Country> parseCountries(String html) {
         List<Country> countries = new ArrayList<>();
         Matcher m = COUNTRY_PATTERN.matcher(html);
@@ -37,7 +32,6 @@ public class FlashscoreParser {
         return countries;
     }
 
-    // ========== LİGLER ==========
     public static List<League> parseLeagues(String html, String countryCode) {
         List<League> leagues = new ArrayList<>();
         Matcher m = LEAGUE_PATTERN.matcher(html);
@@ -53,47 +47,44 @@ public class FlashscoreParser {
         return leagues;
     }
 
-    // ========== SEZONLAR (3 FARKLI PATTERN DENE) ==========
-    public static List<Season> parseSeasons(String html, String leagueId, String leagueUrl) {
+    public static List<Season> parseSeasons(String html, String leagueSlug, String leagueUrl) {
         List<Season> seasons = new ArrayList<>();
 
-        // Pattern 1: data-season attribute
-        Matcher m1 = SEASON_PATTERN_1.matcher(html);
-        while (m1.find()) {
-            String seasonId = m1.group(1);
-            String seasonName = cleanText(m1.group(2));
-            String baseUrl = leagueUrl.endsWith("/") ? leagueUrl.substring(0, leagueUrl.length() - 1) : leagueUrl;
-            seasons.add(new Season(seasonId, seasonName, leagueId, baseUrl + "-" + seasonName.replace("/", "-") + "/"));
-        }
+        // 1. GÜNCEL SEZONU (2025/2026) EN BAŞA MANUEL EKLE
+        String currentSeasonUrl = leagueUrl.replace("archive/", ""); // archive silinince ana sayfa kalır
+        int currentYear = java.time.Year.now().getValue();
+        int startYear = java.time.LocalDate.now().getMonthValue() >= 7 ? currentYear : currentYear - 1;
+        String currentSeasonName = "Current Season (" + startYear + "/" + (startYear + 1) + ")";
 
-        // Pattern 2: YYYY-YYYY formatı URL'de
-        if (seasons.isEmpty()) {
-            Matcher m2 = SEASON_PATTERN_2.matcher(html);
-            while (m2.find()) {
-                String yearRange = m2.group(1);
-                String seasonName = cleanText(m2.group(2));
-                String seasonId = yearRange;
-                String baseUrl = leagueUrl.endsWith("/") ? leagueUrl.substring(0, leagueUrl.length() - 1) : leagueUrl;
-                seasons.add(new Season(seasonId, seasonName, leagueId, baseUrl + "-" + yearRange + "/"));
+        seasons.add(new Season("current", currentSeasonName, leagueSlug, currentSeasonUrl));
+
+        // 2. ARŞİVDEKİ DİĞER SEZONLARI EKLE
+        Document doc = Jsoup.parse(html);
+        Elements links = doc.select("a[href*='" + leagueSlug + "']");
+        Set<String> seenYears = new LinkedHashSet<>();
+        Pattern yearPattern = Pattern.compile("-(\\d{4}-\\d{4}|\\d{4})(?:/|$)");
+
+        for (Element link : links) {
+            String href = link.attr("href");
+            String text = link.text().trim();
+
+            Matcher m = yearPattern.matcher(href);
+            if (m.find()) {
+                String yearPart = m.group(1);
+
+                if (!seenYears.contains(yearPart)) {
+                    seenYears.add(yearPart);
+                    String fullUrl = href.startsWith("http") ? href : FlashscoreConfig.DOMAIN + href;
+                    if (!fullUrl.endsWith("/")) fullUrl += "/";
+                    if (text.isEmpty()) text = yearPart;
+
+                    seasons.add(new Season(yearPart, text, leagueSlug, fullUrl));
+                }
             }
         }
-
-        // Pattern 3: YYYY formatı URL'de
-        if (seasons.isEmpty()) {
-            Matcher m3 = SEASON_PATTERN_3.matcher(html);
-            while (m3.find()) {
-                String year = m3.group(1);
-                String seasonName = cleanText(m3.group(2));
-                String seasonId = year;
-                String baseUrl = leagueUrl.endsWith("/") ? leagueUrl.substring(0, leagueUrl.length() - 1) : leagueUrl;
-                seasons.add(new Season(seasonId, seasonName, leagueId, baseUrl + "-" + year + "/"));
-            }
-        }
-
         return seasons;
     }
 
-    // ========== MAÇ ID'LERİ ==========
     public static List<String> parseMatchIds(String html) {
         Set<String> ids = new LinkedHashSet<>();
         Matcher m = MATCH_ID_PATTERN.matcher(html);
@@ -103,14 +94,11 @@ public class FlashscoreParser {
         return new ArrayList<>(ids);
     }
 
-    // ========== MAÇ DETAYLARI ==========
     public static Match parseMatchDetails(String matchId, String data, String seasonId, String leagueId, String countryCode) {
         String[] parts = data.split("¬");
-
         String homeTeam = null, awayTeam = null;
         Integer homeScore = null, awayScore = null;
         Long timestamp = null;
-
         for (String part : parts) {
             String[] kv = part.split("÷", 2);
             if (kv.length == 2) {
@@ -123,21 +111,16 @@ public class FlashscoreParser {
                 }
             }
         }
-
         if (homeTeam == null || awayTeam == null) return null;
         return new Match(matchId, homeTeam, awayTeam, homeScore, awayScore, timestamp, seasonId, leagueId, countryCode);
     }
 
-    // ========== ORANLAR ==========
     public static Odds parseOdds(String matchId, String data) {
         String[] bookmakers = data.split("~");
-
         for (String bm : bookmakers) {
             if (bm.isEmpty()) continue;
-
             String[] parts = bm.split("¬");
             if (parts.length < 4) continue;
-
             String bmId = parts[0];
             if (bmId.equals("16") || bmId.toLowerCase().contains("bet365")) {
                 Double home = parseDoubleSafe(parts[1]);
@@ -151,13 +134,10 @@ public class FlashscoreParser {
         return null;
     }
 
-    // ========== FSIGN TOKEN ==========
     public static String parseFsignToken(String html) {
-        Matcher m = FSIGN_PATTERN.matcher(html);
-        return m.find() ? m.group(1) : FlashscoreConfig.DEFAULT_FSIGN;
+        return FlashscoreConfig.DEFAULT_FSIGN;
     }
 
-    // ========== YARDIMCI METOTLAR ==========
     private static String cleanText(String text) {
         return text.replaceAll("<[^>]+>", "").replace("&nbsp;", " ").trim();
     }
@@ -180,5 +160,63 @@ public class FlashscoreParser {
 
     private static Double parseDoubleSafe(String s) {
         try { return Double.parseDouble(s.replace(",", ".").trim()); } catch (Exception e) { return null; }
+    }
+
+    public static List<MatchData> parseMatchDataFromResultsHtml(String html, String seasonId,
+                                                                String leagueId, String countryCode) {
+        List<MatchData> list = new ArrayList<>();
+        Document doc = Jsoup.parse(html);
+        Elements matchRows = doc.select("[id^=g_1_]");
+
+        for (Element row : matchRows) {
+            String id = row.attr("id").replace("g_1_", "");
+            if (id.isEmpty()) continue;
+
+            String date = row.select(".event__time").text();
+
+            String home = getTextBySelectors(row,
+                    ".event__participant--home .participant__participantName",
+                    ".event__participant--home a",
+                    "[class*='HomeTeam'] [class*='participantName']",
+                    "[class*='homeTeam'] [class*='name']",
+                    ".event__participant--home .event__participantName",
+                    ".event__participant--home span",
+                    ".event__participant--home");
+
+            String away = getTextBySelectors(row,
+                    ".event__participant--away .participant__participantName",
+                    ".event__participant--away a",
+                    "[class*='AwayTeam'] [class*='participantName']",
+                    "[class*='awayTeam'] [class*='name']",
+                    ".event__participant--away .event__participantName",
+                    ".event__participant--away span",
+                    ".event__participant--away");
+
+            String homeScore = row.select(".event__score--home").text();
+            String awayScore = row.select(".event__score--away").text();
+
+            if (home.isEmpty() || away.isEmpty()) {
+                Elements participants = row.select("[class*='participant']");
+                List<String> names = participants.stream()
+                        .map(Element::text).filter(t -> !t.isEmpty()).distinct().toList();
+                if (home.isEmpty() && names.size() >= 1) home = names.get(0);
+                if (away.isEmpty() && names.size() >= 2) away = names.get(1);
+            }
+
+            MatchData md = new MatchData(id, date, home, away);
+            if (!homeScore.isEmpty() && !awayScore.isEmpty()) {
+                md.ftScore = homeScore + "-" + awayScore;
+            }
+            list.add(md);
+        }
+        return list;
+    }
+
+    private static String getTextBySelectors(Element row, String... selectors) {
+        for (String sel : selectors) {
+            String text = row.select(sel).text();
+            if (!text.isEmpty()) return text;
+        }
+        return "";
     }
 }

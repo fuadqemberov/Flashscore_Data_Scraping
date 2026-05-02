@@ -22,17 +22,20 @@ public class MackolikHalfTimePatternFinder {
     private static final List<String> matchedPatterns = Collections.synchronizedList(new ArrayList<>());
     private static final AtomicInteger completedCount = new AtomicInteger(0);
 
+    // ✅ FIX 1: Timeout süresini artır
     private static final HttpClient client = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(10))
+            .connectTimeout(Duration.ofSeconds(30)) // 10 → 30 saniye
             .build();
+
+    // ✅ FIX 2: Eş zamanlı istek sayısını sınırla (semaphore)
+    private static final Semaphore semaphore = new Semaphore(20); // max 20 paralel istek
 
     public static void main(String[] args) throws Exception {
         long startTime = System.currentTimeMillis();
-        System.out.println("🚀 Sistem başlatıldı (Virtual Threads desteği aktif)");
-        System.out.println("📊 Paralel işlem sayısı: Virtual Thread (sınırsız)\n");
+        System.out.println("🚀 Sistem başlatıldı");
+        System.out.println("📊 Paralel istek limiti: 20\n");
 
-        // 1. JSON Endpoint'inden maç ID'lerini çek
         System.out.println("📍 Maç ID'leri toplanıyor...\n");
         Set<String> matchIds = fetchMatchIdsFromAPI();
 
@@ -41,13 +44,11 @@ public class MackolikHalfTimePatternFinder {
             return;
         }
 
-        System.out.println("\n================================");
+        System.out.println("================================");
         System.out.println("📋 Toplanan Maç ID Sayısı: " + matchIds.size());
         System.out.println("================================\n");
+        System.out.println("⚙️  ANALİZ BAŞLIYOR...\n");
 
-        System.out.println("⚙️  SİSTEM ANALİZİ BAŞLIYOR (VIRTUAL THREADS İLE PARALEL)...\n");
-
-        // 2. Virtual Threads ile Head2Head sayfalarını tara
         List<Future<?>> futures = new ArrayList<>();
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             for (String id : matchIds) {
@@ -55,29 +56,24 @@ public class MackolikHalfTimePatternFinder {
                 futures.add(future);
             }
 
-            // Tüm task'ları tamamlanana kadar bekle
             System.out.println("⏳ Tüm maç analizleri tamamlanıyor...");
             int done = 0;
             for (Future<?> future : futures) {
                 try {
-                    future.get(60, TimeUnit.SECONDS);
+                    future.get(120, TimeUnit.SECONDS); // 60 → 120 saniye
                     done++;
                     printProgress(done, matchIds.size());
                 } catch (TimeoutException te) {
                     future.cancel(true);
-                    System.out.println("\n⚠️ Task timeout. Devam ediliyor...");
-                } catch (Exception e) {
-                    System.out.println("\n⚠️ Task hatasında devam ediliyor...");
-                }
+                } catch (Exception ignored) {}
             }
         }
 
-        // 3. Sonuçları dök
         printResults(startTime);
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 1. API'den Maç ID'lerini Çek
+    // API'den Maç ID'lerini Çek
     // ─────────────────────────────────────────────────────────────
     private static Set<String> fetchMatchIdsFromAPI() {
         Set<String> ids = new LinkedHashSet<>();
@@ -92,9 +88,8 @@ public class MackolikHalfTimePatternFinder {
 
             Pattern p = Pattern.compile("\\[(\\d{7}),");
             Matcher m = p.matcher(response.body());
-            while (m.find()) {
-                ids.add(m.group(1));
-            }
+            while (m.find()) ids.add(m.group(1));
+
             System.out.println("Toplam " + ids.size() + " adet maç ID'si bulundu.");
         } catch (Exception e) {
             System.err.println("❌ API Hatası: " + e.getMessage());
@@ -103,39 +98,68 @@ public class MackolikHalfTimePatternFinder {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 2. Maç Analizi (HTTP + Jsoup)
+    // ✅ FIX 3: Retry mekanizması ile maç analizi
     // ─────────────────────────────────────────────────────────────
     private static void analyzeMatch(String matchId) {
-        String url = "https://arsiv.mackolik.com/Match/Head2Head.aspx?id=" + matchId + "&s=1";
-        String matchUrl = "https://arsiv.mackolik.com/Mac/" + matchId + "/";
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("User-Agent", USER_AGENT)
-                    .GET()
-                    .build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            Document doc = Jsoup.parse(response.body());
+        int maxRetry = 3;
+        int attempt = 0;
 
-            Elements forms = doc.select("div.md:has(div.detail-title:contains(Form Durumu))");
-            if (forms.size() < 2) return;
+        while (attempt < maxRetry) {
+            attempt++;
+            try {
+                semaphore.acquire(); // max 20 eş zamanlı istek
+                try {
+                    String url = "https://arsiv.mackolik.com/Match/Head2Head.aspx?id=" + matchId + "&s=1";
+                    String matchUrl = "https://arsiv.mackolik.com/Mac/" + matchId + "/";
 
-            TableAnalysis home = parseForm(forms.get(0), matchId);
-            TableAnalysis away = parseForm(forms.get(1), matchId);
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create(url))
+                            .header("User-Agent", USER_AGENT)
+                            .timeout(Duration.ofSeconds(30)) // per-request timeout
+                            .GET()
+                            .build();
 
-            checkPatterns(home, away, matchUrl);
+                    HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                    Document doc = Jsoup.parse(response.body());
 
-        } catch (Exception e) {
-            System.out.println("⚠️ Maç ID " + matchId + " işlenirken hata: "
-                    + e.getClass().getSimpleName() + " - " + e.getMessage() + ". Atlanıyor...");
+                    Elements forms = doc.select("div.md:has(div.detail-title:contains(Form Durumu))");
+                    if (forms.size() < 2) return;
+
+                    TableAnalysis home = parseForm(forms.get(0), matchId);
+                    TableAnalysis away = parseForm(forms.get(1), matchId);
+
+                    checkPatterns(home, away, matchUrl);
+                    return; // başarılı, döngüden çık
+
+                } finally {
+                    semaphore.release();
+                }
+
+            } catch (java.net.http.HttpTimeoutException e) {
+                if (attempt < maxRetry) {
+                    try {
+                        // ✅ FIX 4: Retry öncesi bekle (exponential backoff)
+                        Thread.sleep(1000L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+                // maxRetry'e ulaşıldıysa sessizce geç
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (Exception e) {
+                // Timeout dışı hatalar için sessizce geç
+                return;
+            }
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 3. Form Tablosunu Parse Et
+    // Form Tablosunu Parse Et
     // ─────────────────────────────────────────────────────────────
     private static TableAnalysis parseForm(Element container, String targetId) {
-        // Takım adı
         String fullTitle = container.select(".detail-title").text();
         String teamName;
         if (fullTitle.contains("-")) {
@@ -146,10 +170,8 @@ public class MackolikHalfTimePatternFinder {
 
         Elements rows = container.select("tr.row, tr.row-2");
 
-        // Hedef maçın satır indexini bul
         int targetIndex = -1;
         for (int i = 0; i < rows.size(); i++) {
-            // Skor linkini tablo 4. sütunda ara
             Elements scoreLinks = rows.get(i).select("td:nth-child(4) a");
             if (!scoreLinks.isEmpty()
                     && scoreLinks.first().attr("href").contains(targetId)) {
@@ -171,72 +193,56 @@ public class MackolikHalfTimePatternFinder {
 
     private static String getOpponentFromRow(Elements rows, int index) {
         if (index < 0 || index >= rows.size()) return null;
-        // 3. veya 5. sütundaki takım linki
         Elements links = rows.get(index).select(
                 "td:nth-child(3) a[href*=/Takim/], td:nth-child(5) a[href*=/Takim/]");
         return links.isEmpty() ? null : links.first().text().trim();
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 4. Pattern Kontrolleri
+    // Pattern Kontrolleri
     // ─────────────────────────────────────────────────────────────
     private static void checkPatterns(TableAnalysis h, TableAnalysis a, String url) {
-
-        // ── PATTERN 1: BİLGİ-3 (Havuz Eşleşmesi, 2'li kesişim) ──
         Set<String> matchType1 = new HashSet<>(h.prevOpponents);
         matchType1.retainAll(a.nextOpponents);
 
         Set<String> matchType2 = new HashSet<>(h.nextOpponents);
         matchType2.retainAll(a.prevOpponents);
 
-        if (matchType1.size() >= 2) {
+        if (matchType1.size() >= 2)
             recordMatch(url, h.teamName, a.teamName, matchType1,
-                    "BİLGİ-3 (Havuz Eşleşmesi)",
-                    "A'nın Önceki 2 Maçı = B'nin Sonraki 2 Maçı", "🟢");
-        }
-        if (matchType2.size() >= 2) {
+                    "BİLGİ-3 (Havuz Eşleşmesi)", "A'nın Önceki 2 Maçı = B'nin Sonraki 2 Maçı", "🟢");
+        if (matchType2.size() >= 2)
             recordMatch(url, h.teamName, a.teamName, matchType2,
-                    "BİLGİ-3 (Havuz Eşleşmesi)",
-                    "A'nın Sonraki 2 Maçı = B'nin Önceki 2 Maçı", "🟢");
-        }
+                    "BİLGİ-3 (Havuz Eşleşmesi)", "A'nın Sonraki 2 Maçı = B'nin Önceki 2 Maçı", "🟢");
 
-        // ── PATTERN 2: ÇAPRAZ EŞLEŞMELERİ ──
         boolean c1A = h.prev1 != null && h.prev1.equals(a.next1);
         boolean c1B = h.next1 != null && h.next1.equals(a.prev1);
         boolean c2A = h.prev2 != null && h.prev2.equals(a.next2);
         boolean c2B = h.next2 != null && h.next2.equals(a.prev2);
 
-        // Mesafe 1
         if (c1A && c1B) {
             recordMatch(url, h.teamName, a.teamName, Set.of(h.prev1, h.next1),
-                    "🔥 KUSURSUZ X ÇAPRAZ (Mesafe 1)",
-                    "Ev[-1] = Dep[+1] VE Ev[+1] = Dep[-1]", "🔥");
+                    "🔥 KUSURSUZ X ÇAPRAZ (Mesafe 1)", "Ev[-1] = Dep[+1] VE Ev[+1] = Dep[-1]", "🔥");
         } else {
             if (c1A) recordMatch(url, h.teamName, a.teamName, Set.of(h.prev1),
-                    "YENİ PATTERN (1. Mesafe Çapraz)",
-                    "Ev Sahibinin 1 Önceki Rakibi [-1] = Deplasmanın 1 Sonraki Rakibi [+1]", "🔵");
+                    "YENİ PATTERN (1. Mesafe Çapraz)", "Ev Sahibinin 1 Önceki Rakibi [-1] = Deplasmanın 1 Sonraki Rakibi [+1]", "🔵");
             if (c1B) recordMatch(url, h.teamName, a.teamName, Set.of(h.next1),
-                    "YENİ PATTERN (1. Mesafe Çapraz)",
-                    "Ev Sahibinin 1 Sonraki Rakibi [+1] = Deplasmanın 1 Önceki Rakibi [-1]", "🔵");
+                    "YENİ PATTERN (1. Mesafe Çapraz)", "Ev Sahibinin 1 Sonraki Rakibi [+1] = Deplasmanın 1 Önceki Rakibi [-1]", "🔵");
         }
 
-        // Mesafe 2
         if (c2A && c2B) {
             recordMatch(url, h.teamName, a.teamName, Set.of(h.prev2, h.next2),
-                    "🔥 KUSURSUZ X ÇAPRAZ (Mesafe 2)",
-                    "Ev[-2] = Dep[+2] VE Ev[+2] = Dep[-2]", "🔥");
+                    "🔥 KUSURSUZ X ÇAPRAZ (Mesafe 2)", "Ev[-2] = Dep[+2] VE Ev[+2] = Dep[-2]", "🔥");
         } else {
             if (c2A) recordMatch(url, h.teamName, a.teamName, Set.of(h.prev2),
-                    "YENİ PATTERN (2. Mesafe Çapraz)",
-                    "Ev Sahibinin 2 Önceki Rakibi [-2] = Deplasmanın 2 Sonraki Rakibi [+2]", "🔵");
+                    "YENİ PATTERN (2. Mesafe Çapraz)", "Ev Sahibinin 2 Önceki Rakibi [-2] = Deplasmanın 2 Sonraki Rakibi [+2]", "🔵");
             if (c2B) recordMatch(url, h.teamName, a.teamName, Set.of(h.next2),
-                    "YENİ PATTERN (2. Mesafe Çapraz)",
-                    "Ev Sahibinin 2 Sonraki Rakibi [+2] = Deplasmanın 2 Önceki Rakibi [-2]", "🔵");
+                    "YENİ PATTERN (2. Mesafe Çapraz)", "Ev Sahibinin 2 Sonraki Rakibi [+2] = Deplasmanın 2 Önceki Rakibi [-2]", "🔵");
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 5. Yardımcı Metodlar
+    // Yardımcı Metodlar
     // ─────────────────────────────────────────────────────────────
     private static void recordMatch(String url, String home, String away,
                                     Set<String> common, String patternName,
@@ -244,18 +250,12 @@ public class MackolikHalfTimePatternFinder {
         String resultMsg = String.format(
                 "%s [%s] %s vs %s\n   Açıklama: %s\n   Eşleşen Takım(lar): %s\n   Taktik: 2/1 VEYA 1/2 Oyna!\n   Link: %s",
                 emoji, patternName, home, away, matchDesc, common, url);
-
-
         matchedPatterns.add(resultMsg);
     }
 
     private static void printProgress(int completed, int total) {
         int percentage = (int) ((completed * 100.0) / total);
         System.out.print("\r  ✓ İlerleme: " + completed + "/" + total + " (" + percentage + "%)");
-    }
-
-    private static String nvl(String s) {
-        return s != null ? s : "-";
     }
 
     private static void printResults(long startTime) {
@@ -288,7 +288,7 @@ public class MackolikHalfTimePatternFinder {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 6. Veri Modeli
+    // Veri Modeli
     // ─────────────────────────────────────────────────────────────
     static class TableAnalysis {
         String teamName;
@@ -298,10 +298,10 @@ public class MackolikHalfTimePatternFinder {
 
         TableAnalysis(String teamName, String prev2, String prev1, String next1, String next2) {
             this.teamName = teamName;
-            this.prev2   = prev2;
-            this.prev1   = prev1;
-            this.next1   = next1;
-            this.next2   = next2;
+            this.prev2 = prev2;
+            this.prev1 = prev1;
+            this.next1 = next1;
+            this.next2 = next2;
             if (prev2 != null) prevOpponents.add(prev2);
             if (prev1 != null) prevOpponents.add(prev1);
             if (next1 != null) nextOpponents.add(next1);
