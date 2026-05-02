@@ -81,7 +81,7 @@ public class Main {
             // ── 1. Ülkeleri çek ─────────────────────────────────────────────────
             System.out.println("\n🌍 Ülkeler çekiliyor...");
             System.out.flush();
-            String footballHtml = client.getHtml(FlashscoreConfig.DOMAIN + "/football/");
+            String footballHtml = client.getHtmlSimple(FlashscoreConfig.DOMAIN + "/football/");
             List<Country> countries = FlashscoreParser.parseCountries(footballHtml);
             System.out.println("✅ " + countries.size() + " ülke bulundu.");
 
@@ -96,7 +96,7 @@ public class Main {
                 // Ülke sayfasından ligleri parse et
                 List<League> leagues;
                 try {
-                    String countryHtml = client.getHtml(country.url());
+                    String countryHtml = client.getHtmlSimple(country.url());
                     leagues = FlashscoreParser.parseLeagues(countryHtml, country.code());
                 } catch (Exception e) {
                     System.out.println("   ⚠️  Ülke sayfası yüklenemedi, geçiliyor: " + e.getMessage());

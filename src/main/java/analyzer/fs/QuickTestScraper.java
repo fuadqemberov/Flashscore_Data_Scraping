@@ -64,7 +64,7 @@ public class QuickTestScraper {
                 System.out.printf("📅 [%d/%d] Sezon: %s%n", si + 1, targetSeasons.size(), season.name());
 
                 String seasonUrl  = season.url() + "results/";
-                String seasonHtml = client.getHtml(seasonUrl);
+                String seasonHtml = client.getHtmlWithMatches(seasonUrl);
 
                 List<MatchData> seasonMatches = FlashscoreParser.parseMatchDataFromResultsHtml(
                         seasonHtml, season.id(), leagueSlug, countryCode);
