@@ -187,8 +187,12 @@ public class Main {
                     executor.shutdown();
                     executor.awaitTermination(10, TimeUnit.MINUTES);
 
-                    globalMatches.addAll(leagueMatches);
-                    System.out.printf("      ✅ Lig tamamlandı. Toplam biriken maç: %d%n", globalMatches.size());
+                    List<MatchData> oddsMatches = leagueMatches.stream()
+                            .filter(m -> !m.oddsMap.isEmpty())
+                            .collect(java.util.stream.Collectors.toList());
+                    globalMatches.addAll(oddsMatches);
+                    System.out.printf("      ✅ Lig tamam. Oranlı: %d/%d | Toplam: %d%n",
+                            oddsMatches.size(), leagueMatches.size(), globalMatches.size());
                 }
             }
 
