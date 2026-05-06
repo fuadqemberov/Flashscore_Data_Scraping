@@ -29,7 +29,7 @@ public class MackolikHalfTimePatternFinder {
 
     private static final Semaphore semaphore = new Semaphore(20);
 
-    public static void main(String[] args) throws Exception {
+    static void main(String[] args) throws Exception {
         long startTime = System.currentTimeMillis();
         System.out.println("🚀 Sistem başlatıldı");
         System.out.println("📊 Paralel istek limiti: 20\n");
@@ -127,6 +127,7 @@ public class MackolikHalfTimePatternFinder {
                     TableAnalysis away = parseForm(forms.get(1), matchId);
 
                     checkPatterns(home, away, matchUrl);
+                    checkTriplePattern(home, away, matchUrl);  // YENİ PATTERN
                     return;
 
                 } finally {
@@ -152,7 +153,7 @@ public class MackolikHalfTimePatternFinder {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Form Tablosunu Parse Et
+    // Form Tablosunu Parse Et (GÜNCELLENDİ)
     // ─────────────────────────────────────────────────────────────
     private static TableAnalysis parseForm(Element container, String targetId) {
         String fullTitle = container.select(".detail-title").text();
@@ -164,17 +165,52 @@ public class MackolikHalfTimePatternFinder {
         }
 
         Elements rows = container.select("tr.row, tr.row-2");
+        List<PastMatch> pastMatches = new ArrayList<>();
+        String upcomingLeague = null;
 
-        // 1. KISIM: ESKİ SİSTEM İÇİN (Çapraz eşleşmeler)
+        // Eski pattern için hala lazım
         int targetIndex = -1;
         for (int i = 0; i < rows.size(); i++) {
-            Elements scoreLinks = rows.get(i).select("td:nth-child(4) a");
-            if (!scoreLinks.isEmpty() && scoreLinks.first().attr("href").contains(targetId)) {
-                targetIndex = i;
-                break;
+            Element row = rows.get(i);
+            Elements scoreLinks = row.select("td:nth-child(4) a");
+            if (scoreLinks.isEmpty()) continue;
+
+            String href = scoreLinks.first().attr("href");
+            boolean isTarget = href.contains(targetId);
+            if (isTarget) targetIndex = i;
+
+            // Lig kısaltması
+            String league = row.select("td:first-child a").text().trim();
+
+            // Tarih
+            String date = row.select("td:nth-child(2)").text().trim();
+
+            // Ev sahibi ve deplasman
+            Element homeElem = row.select("td:nth-child(3) a[href*=/Takim/], td:nth-child(3) span.team").first();
+            Element awayElem = row.select("td:nth-child(5) a[href*=/Takim/], td:nth-child(5) span.team").first();
+            if (homeElem == null || awayElem == null) continue;
+            String homeTeam = homeElem.text().trim();
+            String awayTeam = awayElem.text().trim();
+
+            // Skor ve tamamlanma durumu
+            String scoreText = scoreLinks.first().text().trim();
+            boolean completed = scoreText.matches(".*\\d+.*-.*\\d+.*");
+
+            // Maç ID'sini skor linkinden al
+            String matchId = "";
+            Matcher idMatcher = Pattern.compile("/Mac/(\\d+)/").matcher(href);
+            if (idMatcher.find()) matchId = idMatcher.group(1);
+
+            PastMatch pm = new PastMatch(league, date, matchId, homeTeam, awayTeam, scoreText, completed);
+            pastMatches.add(pm);
+
+            // Eğer bu satır analiz edilen maç ise ve henüz oynanmamışsa ligini al
+            if (isTarget && !completed) {
+                upcomingLeague = league;
             }
         }
 
+        // Eski patternler için çapraz rakamlar (opsiyonel olarak hala kullanılıyor)
         String prev2 = null, prev1 = null, next1 = null, next2 = null;
         if (targetIndex != -1) {
             prev2 = getOpponentFromRow(rows, targetIndex - 2);
@@ -183,27 +219,17 @@ public class MackolikHalfTimePatternFinder {
             next2 = getOpponentFromRow(rows, targetIndex + 2);
         }
 
-        // 2. KISIM: YENİ SİSTEM İÇİN (TAMAMEN BAĞIMSIZ - Takımın oynadığı en son 2 skor)
+        // Bağımsız skor serisi için son 2 tamamlanmış skor
         List<String> playedScores = new ArrayList<>();
-        for (Element row : rows) {
-            Elements scoreLinks = row.select("td:nth-child(4) a");
-            if (!scoreLinks.isEmpty()) {
-                String scoreText = scoreLinks.first().text().trim();
-                // Regex: İçinde sayı, tire ve tekrar sayı olan metinler oynanmış maçtır ("1 - 0" vb.)
-                if (scoreText.matches(".*\\d+.*-.*\\d+.*")) {
-                    playedScores.add(scoreText);
-                }
+        for (PastMatch pm : pastMatches) {
+            if (pm.completed) {
+                playedScores.add(pm.score);
             }
         }
+        String last2Score = playedScores.size() >= 2 ? playedScores.get(playedScores.size() - 2) : null;
+        String last1Score = playedScores.size() >= 2 ? playedScores.get(playedScores.size() - 1) : null;
 
-        String last2Score = null; // İlk önce gelen maç
-        String last1Score = null; // Sonra gelen (En güncel) maç
-        if (playedScores.size() >= 2) {
-            last1Score = playedScores.get(playedScores.size() - 1);
-            last2Score = playedScores.get(playedScores.size() - 2);
-        }
-
-        return new TableAnalysis(teamName, prev2, prev1, next1, next2, last2Score, last1Score);
+        return new TableAnalysis(teamName, prev2, prev1, next1, next2, last2Score, last1Score, pastMatches, upcomingLeague);
     }
 
     private static String getOpponentFromRow(Elements rows, int index) {
@@ -213,10 +239,9 @@ public class MackolikHalfTimePatternFinder {
         return links.isEmpty() ? null : links.first().text().trim();
     }
 
-    // Skor eşleşme kontrolü (boşlukları görmezden gelir)
     private static boolean isScoreMatch(String actualScore, String... acceptedScores) {
         if (actualScore == null) return false;
-        String cleanScore = actualScore.replace(" ", ""); // "1 - 0" -> "1-0"
+        String cleanScore = actualScore.replace(" ", "");
         for (String accepted : acceptedScores) {
             if (cleanScore.equals(accepted)) return true;
         }
@@ -224,14 +249,10 @@ public class MackolikHalfTimePatternFinder {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Pattern Kontrolleri
+    // Pattern Kontrolleri (ESKİ)
     // ─────────────────────────────────────────────────────────────
     private static void checkPatterns(TableAnalysis h, TableAnalysis a, String url) {
-
-        // =========================================================================
-        // 🎯 YENİ VE BAĞIMSIZ ÖZELLİK: ARDIŞIK SKOR PATTERNI
-        // Core (eski) patternlerden tamamen bağımsız çalışır. Sadece oynanan son 2 maça bakar.
-        // =========================================================================
+        // Bağımsız skor serisi
         boolean homeSequenceMatch = isScoreMatch(h.last2Score, "1-0", "0-1") && isScoreMatch(h.last1Score, "2-1", "1-2");
         boolean awaySequenceMatch = isScoreMatch(a.last2Score, "1-0", "0-1") && isScoreMatch(a.last1Score, "2-1", "1-2");
 
@@ -243,9 +264,8 @@ public class MackolikHalfTimePatternFinder {
             recordMatch(url, h.teamName, a.teamName, Set.of("Maç 1: " + a.last2Score + " | Maç 2: " + a.last1Score),
                     "🎯 BAĞIMSIZ SKOR SERİSİ (DEPLASMAN)", "Deplasmanın oynadığı son 2 maç sırasıyla (1-0 / 0-1) ve ardından (2-1 / 1-2) bitti.", "🎯");
         }
-        // =========================================================================
 
-        // ESKİ CORE PATTERNLERİ (Eski işleyişi bozulmadan devam ediyor)
+        // Çapraz havuz eşleşmeleri
         Set<String> matchType1 = new HashSet<>(h.prevOpponents);
         matchType1.retainAll(a.nextOpponents);
 
@@ -283,6 +303,145 @@ public class MackolikHalfTimePatternFinder {
             if (c2B) recordMatch(url, h.teamName, a.teamName, Set.of(h.next2),
                     "YENİ PATTERN (2. Mesafe Çapraz)", "Ev Sahibinin 2 Sonraki Rakibi [+2] = Deplasmanın 2 Önceki Rakibi [-2]", "🔵");
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // YENİ ÜÇLÜ AĞ PATTERNİ
+    // ─────────────────────────────────────────────────────────────
+    private static void checkTriplePattern(TableAnalysis home, TableAnalysis away, String matchUrl) {
+        // Lig tanımlı değilse çık
+        if (home.upcomingLeague == null || away.upcomingLeague == null) return;
+        if (!home.upcomingLeague.equals(away.upcomingLeague)) return;
+        String league = home.upcomingLeague;   // Aynı lig
+
+        // Aynı ligdeki tamamlanmış maçları filtrele
+        List<PastMatch> homeCompleted = home.pastMatches.stream()
+                .filter(pm -> pm.completed && pm.league.equals(league))
+                .toList();
+        List<PastMatch> awayCompleted = away.pastMatches.stream()
+                .filter(pm -> pm.completed && pm.league.equals(league))
+                .toList();
+
+        // Ev = Z (sonra X ile oynar), Dep = Y (önce X ile oynar)
+        // Ortak rakip adayları
+        Set<String> homeOpponents = new HashSet<>();
+        for (PastMatch pm : homeCompleted) {
+            String opp = pm.homeTeam.equals(home.teamName) ? pm.awayTeam : pm.homeTeam;
+            homeOpponents.add(opp);
+        }
+        Set<String> awayOpponents = new HashSet<>();
+        for (PastMatch pm : awayCompleted) {
+            String opp = pm.homeTeam.equals(away.teamName) ? pm.awayTeam : pm.homeTeam;
+            awayOpponents.add(opp);
+        }
+
+        Set<String> commonX = new HashSet<>(homeOpponents);
+        commonX.retainAll(awayOpponents);
+
+        for (String x : commonX) {
+            // Y'nin X ile maçı (dep'in, yani awayCompleted'da)
+            PastMatch matchY_X = null;
+            int indexY = -1;
+            for (int i = 0; i < awayCompleted.size(); i++) {
+                PastMatch pm = awayCompleted.get(i);
+                String opp = pm.homeTeam.equals(away.teamName) ? pm.awayTeam : pm.homeTeam;
+                if (opp.equals(x)) {
+                    matchY_X = pm;
+                    indexY = i;
+                    break;
+                }
+            }
+            // Z'nin X ile maçı (ev'in, yani homeCompleted'da)
+            PastMatch matchZ_X = null;
+            int indexZ = -1;
+            for (int i = 0; i < homeCompleted.size(); i++) {
+                PastMatch pm = homeCompleted.get(i);
+                String opp = pm.homeTeam.equals(home.teamName) ? pm.awayTeam : pm.homeTeam;
+                if (opp.equals(x)) {
+                    matchZ_X = pm;
+                    indexZ = i;
+                    break;
+                }
+            }
+
+            // Y-X, Z-X'ten önce oynanmış olmalı (indeksleri küçük olan daha eski)
+            if (matchY_X == null || matchZ_X == null) continue;
+            if (indexY >= indexZ) continue;   // Y-X daha eski değilse olmaz
+
+            // X takımının formunu, Z-X maçının sayfasından kontrol et
+            if (matchZ_X.matchId.isEmpty()) continue;
+            List<PastMatch> xPastMatches = fetchTeamPastMatches(matchZ_X.matchId, x);
+            if (xPastMatches == null) continue;
+
+            // X'in aynı ligdeki tamamlanmış maçları (kronolojik sıralı)
+            List<PastMatch> xLeagueMatches = xPastMatches.stream()
+                    .filter(pm -> pm.completed && pm.league.equals(league))
+                    .toList();
+            if (xLeagueMatches.size() < 2) continue;
+
+            // Son iki lig maçı (en güncel ikisi)
+            PastMatch lastMatch = xLeagueMatches.get(xLeagueMatches.size() - 1);
+            PastMatch secondLast = xLeagueMatches.get(xLeagueMatches.size() - 2);
+
+            String oppLast = lastMatch.homeTeam.equals(x) ? lastMatch.awayTeam : lastMatch.homeTeam;
+            String oppSecond = secondLast.homeTeam.equals(x) ? secondLast.awayTeam : secondLast.homeTeam;
+
+            // Sırasıyla önce Y'ye, sonra Z'ye karşı oynamış olmalı
+            if (oppSecond.equals(away.teamName) && oppLast.equals(home.teamName)) {
+                // Pattern tamam! Tahminle beraber kaydet
+                String desc = String.format(
+                        "Üçlü Ağ: %s → %s (önce), %s → %s (sonra), şimdi %s - %s oynanacak. Tahmin: 2/1 veya 1/2 (İY/MS)",
+                        x, away.teamName, x, home.teamName, home.teamName, away.teamName);
+                recordMatch(matchUrl, home.teamName, away.teamName, Set.of(x),
+                        "🧩 ÜÇLÜ AĞ PATTERNİ (Lig: " + league + ")", desc, "🧩");
+            }
+        }
+    }
+
+    // Belirli bir maçın Head2Head sayfasından, verilen takımın formundaki PastMatch listesini döner
+    private static List<PastMatch> fetchTeamPastMatches(String matchId, String teamName) {
+        try {
+            String url = "https://arsiv.mackolik.com/Match/Head2Head.aspx?id=" + matchId + "&s=1";
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("User-Agent", USER_AGENT)
+                    .timeout(Duration.ofSeconds(30))
+                    .GET()
+                    .build();
+            HttpResponse<String> resp = client.send(request, HttpResponse.BodyHandlers.ofString());
+            Document doc = Jsoup.parse(resp.body());
+
+            Elements forms = doc.select("div.md:has(div.detail-title:contains(Form Durumu))");
+            for (Element form : forms) {
+                String title = form.select(".detail-title").text();
+                // Takım adı başlıkta geçiyorsa bu form X'indir
+                if (title.contains(teamName)) {
+                    // parseForm mantığını kullanalım ama sadece pastMatches için
+                    Elements rows = form.select("tr.row, tr.row-2");
+                    List<PastMatch> list = new ArrayList<>();
+                    for (Element row : rows) {
+                        Elements scoreLinks = row.select("td:nth-child(4) a");
+                        if (scoreLinks.isEmpty()) continue;
+                        String href = scoreLinks.first().attr("href");
+                        String league = row.select("td:first-child a").text().trim();
+                        String date = row.select("td:nth-child(2)").text().trim();
+                        Element homeElem = row.select("td:nth-child(3) a[href*=/Takim/], td:nth-child(3) span.team").first();
+                        Element awayElem = row.select("td:nth-child(5) a[href*=/Takim/], td:nth-child(5) span.team").first();
+                        if (homeElem == null || awayElem == null) continue;
+                        String homeTeam = homeElem.text().trim();
+                        String awayTeam = awayElem.text().trim();
+                        String scoreText = scoreLinks.first().text().trim();
+                        boolean completed = scoreText.matches(".*\\d+.*-.*\\d+.*");
+                        String mid = "";
+                        Matcher idMatcher = Pattern.compile("/Mac/(\\d+)/").matcher(href);
+                        if (idMatcher.find()) mid = idMatcher.group(1);
+                        list.add(new PastMatch(league, date, mid, homeTeam, awayTeam, scoreText, completed));
+                    }
+                    return list;
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -332,16 +491,39 @@ public class MackolikHalfTimePatternFinder {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Veri Modeli
+    // Veri Modelleri
     // ─────────────────────────────────────────────────────────────
+    static class PastMatch {
+        String league;
+        String date;
+        String matchId;
+        String homeTeam;
+        String awayTeam;
+        String score;
+        boolean completed;
+
+        PastMatch(String league, String date, String matchId, String homeTeam, String awayTeam, String score, boolean completed) {
+            this.league = league;
+            this.date = date;
+            this.matchId = matchId;
+            this.homeTeam = homeTeam;
+            this.awayTeam = awayTeam;
+            this.score = score;
+            this.completed = completed;
+        }
+    }
+
     static class TableAnalysis {
         String teamName;
         String prev2, prev1, next1, next2;
-        String last2Score, last1Score; // BAĞIMSIZ YENİ ÖZELLİK: Sadece en son oynanan 2 maç
+        String last2Score, last1Score;
         Set<String> prevOpponents = new HashSet<>();
         Set<String> nextOpponents = new HashSet<>();
+        List<PastMatch> pastMatches;      // YENİ
+        String upcomingLeague;            // YENİ
 
-        TableAnalysis(String teamName, String prev2, String prev1, String next1, String next2, String last2Score, String last1Score) {
+        TableAnalysis(String teamName, String prev2, String prev1, String next1, String next2, String last2Score, String last1Score,
+                      List<PastMatch> pastMatches, String upcomingLeague) {
             this.teamName = teamName;
             this.prev2 = prev2;
             this.prev1 = prev1;
@@ -349,6 +531,8 @@ public class MackolikHalfTimePatternFinder {
             this.next2 = next2;
             this.last2Score = last2Score;
             this.last1Score = last1Score;
+            this.pastMatches = pastMatches;
+            this.upcomingLeague = upcomingLeague;
             if (prev2 != null) prevOpponents.add(prev2);
             if (prev1 != null) prevOpponents.add(prev1);
             if (next1 != null) nextOpponents.add(next1);
