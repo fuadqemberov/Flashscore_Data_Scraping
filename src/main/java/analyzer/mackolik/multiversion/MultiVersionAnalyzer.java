@@ -24,9 +24,7 @@ public class MultiVersionAnalyzer {
     private static final int END_YEAR = 2010;
     private static final int[] ANALYSIS_VERSIONS = {1, 2, 3, 4};
 
-    // =============================================
-    // İç sınıf: Takım analiz görevini yapan callable
-    // =============================================
+
     private static class MultiVersionTeamProcessorTask implements Callable<MultiVersionResult> {
         private final int teamId;
         private final RequestConfig requestConfig;
@@ -123,9 +121,6 @@ public class MultiVersionAnalyzer {
         }
     }
 
-    // =============================================
-    // Sonuç sınıfları
-    // =============================================
     static class VersionResult {
         int version;
         AdvancedMatchPattern pattern;
@@ -197,10 +192,8 @@ public class MultiVersionAnalyzer {
         }
     }
 
-    // =============================================
-    // Ana metod: Virtual Thread tabanlı çalıştırma
-    // =============================================
-    public static void main(String[] args) {
+
+    static void main(String[] args) {
         List<String> teamIds = TeamIdsFetcher.fetchUnstartedTeamIds();
             if (teamIds.isEmpty()) {
                 log.warn("No team IDs found. Exiting.");

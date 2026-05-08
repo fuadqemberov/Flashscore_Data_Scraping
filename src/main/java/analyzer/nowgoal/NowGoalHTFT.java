@@ -34,7 +34,7 @@ public class NowGoalHTFT {
     static final int    MAX_BRIDGE_OFFSET = 5;
     static final String CURRENT_SEASON   = String.valueOf(java.time.Year.now().getValue());
     static final String BASE             = "https://football.nowgoal26.com";
-    static final String LIVE_BASE        = "https://live5.nowgoal26.com";
+    static final String LIVE_BASE        = "https://live8.nowgoal26.com";
     // ─────────────────────────────────────────────────────────
 
     static final HttpClient HTTP = HttpClient.newBuilder()
