@@ -2,6 +2,7 @@ package analyzer.mackolik.triplepattern;
 
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.jsoup.Jsoup;
@@ -53,102 +54,104 @@ public class HttpTeamNamePatternFetcher {
      */
     public static TeamNamePattern buildCurrentPattern(CloseableHttpClient http, int teamId) throws IOException {
 
-        String html = fetchHtml(http, String.format(BASE_URL, teamId, CURRENT_SEASON));
-        if (html == null) throw new RuntimeException("Cannot fetch current season for team " + teamId);
+         System.out.println("       [ID:" + teamId + "] Mevcut sezon (2025/2026) fetch ediliyor...");
+         String html = fetchHtml(http, String.format(BASE_URL, teamId, CURRENT_SEASON));
+         if (html == null) throw new RuntimeException("Cannot fetch current season for team " + teamId);
 
-        Document doc = Jsoup.parse(html);
-        String teamName = extractTeamName(doc);
+         Document doc = Jsoup.parse(html);
+         String teamName = extractTeamName(doc);
 
-        Element tableBody = doc.selectFirst("#tblFixture > tbody");
-        if (tableBody == null) {
-            log.warn("No fixture table for team {}", teamId);
-            return null;
-        }
+         Element tableBody = doc.selectFirst("#tblFixture > tbody");
+         if (tableBody == null) {
+             log.warn("No fixture table for team {}", teamId);
+             return null;
+         }
 
-        // Collect ALL rows in order
-        List<Element> rows = collectLeagueRows(tableBody);
+         // Collect ALL rows in order
+         List<Element> rows = collectLeagueRows(tableBody);
 
-        // Split into played / unstarted
-        int unstartedIdx = -1;
-        for (int i = 0; i < rows.size(); i++) {
-            Element row = rows.get(i);
-            Element scoreEl = row.selectFirst("td:nth-child(5) b a");
+         // Split into played / unstarted
+         int unstartedIdx = -1;
+         for (int i = 0; i < rows.size(); i++) {
+             Element row = rows.get(i);
+             Element scoreEl = row.selectFirst("td:nth-child(5) b a");
 
-            if (scoreEl == null) {
-                // No anchor = likely upcoming (time shown instead of score)
-                String cell5 = extractCell(row, "td:nth-child(5)");
-                String home  = extractCell(row, "td:nth-child(3)");
-                String away  = extractCell(row, "td:nth-child(7)");
-                if (home != null && !home.isEmpty() && away != null && !away.isEmpty()) {
-                    unstartedIdx = i;
-                    break;
-                }
-                continue;
-            }
+             if (scoreEl == null) {
+                 // No anchor = likely upcoming (time shown instead of score)
+                 String cell5 = extractCell(row, "td:nth-child(5)");
+                 String home  = extractCell(row, "td:nth-child(3)");
+                 String away  = extractCell(row, "td:nth-child(7)");
+                 if (home != null && !home.isEmpty() && away != null && !away.isEmpty()) {
+                     unstartedIdx = i;
+                     break;
+                 }
+                 continue;
+             }
 
-            String score = scoreEl.text().trim();
-            // "v" or empty or non-numeric = unplayed
-            if (score.isEmpty() || score.equalsIgnoreCase("v")) {
-                unstartedIdx = i;
-                break;
-            }
-            // Normalize spaces: "3 - 1" → "3-1"
-            String normalized = score.replaceAll("\\s*-\\s*", "-");
-            String[] parts = normalized.split("-");
-            if (parts.length != 2) { unstartedIdx = i; break; }
-            try {
-                Integer.parseInt(parts[0].trim());
-                Integer.parseInt(parts[1].trim());
-                // It's a valid score → played, continue
-            } catch (NumberFormatException e) {
-                unstartedIdx = i;
-                break;
-            }
-        }
+             String score = scoreEl.text().trim();
+             // "v" or empty or non-numeric = unplayed
+             if (score.isEmpty() || score.equalsIgnoreCase("v")) {
+                 unstartedIdx = i;
+                 break;
+             }
+             // Normalize spaces: "3 - 1" → "3-1"
+             String normalized = score.replaceAll("\\s*-\\s*", "-");
+             String[] parts = normalized.split("-");
+             if (parts.length != 2) { unstartedIdx = i; break; }
+             try {
+                 Integer.parseInt(parts[0].trim());
+                 Integer.parseInt(parts[1].trim());
+                 // It's a valid score → played, continue
+             } catch (NumberFormatException e) {
+                 unstartedIdx = i;
+                 break;
+             }
+         }
 
-        if (unstartedIdx < 0) {
-            log.warn("No unstarted match found for team {}", teamId);
-            return null;
-        }
+         if (unstartedIdx < 0) {
+             System.out.println("       ⚠️  Başlamamış maç bulunamadı");
+             log.warn("No unstarted match found for team {}", teamId);
+             return null;
+         }
 
-        // Extract opponent names for played matches
-        // prev: up to 3 matches BEFORE unstartedIdx (oldest first)
-        List<String> prevOpponents = new ArrayList<>();
-        for (int i = Math.max(0, unstartedIdx - 3); i < unstartedIdx; i++) {
-            String opp = extractOpponent(rows.get(i), teamName);
-            if (opp != null) prevOpponents.add(opp);
-        }
+         // Extract opponent names for played matches
+         // prev: up to 3 matches BEFORE unstartedIdx (oldest first)
+         List<String> prevOpponents = new ArrayList<>();
+         for (int i = Math.max(0, unstartedIdx - 3); i < unstartedIdx; i++) {
+             String opp = extractOpponent(rows.get(i), teamName);
+             if (opp != null) prevOpponents.add(opp);
+         }
 
-        // next: up to 3 matches AFTER unstartedIdx (these may also be unplayed - extract team names anyway)
-        List<String> nextOpponents = new ArrayList<>();
-        for (int i = unstartedIdx + 1; i < Math.min(rows.size(), unstartedIdx + 4); i++) {
-            Element row  = rows.get(i);
-            String  home = extractCell(row, "td:nth-child(3)");
-            String  away = extractCell(row, "td:nth-child(7)");
-            if (home == null || away == null) continue;
-            // Try to figure out which side is "our" team
-            String norm = normalize(teamName);
-            String opp;
-            if (normalize(home).contains(norm) || norm.contains(normalize(home))) {
-                opp = away;
-            } else if (normalize(away).contains(norm) || norm.contains(normalize(away))) {
-                opp = home;
-            } else {
-                // Fallback: pick whichever is non-empty
-                opp = (!away.isEmpty()) ? away : home;
-            }
-            if (opp != null && !opp.isEmpty()) nextOpponents.add(opp);
-        }
+         // next: up to 3 matches AFTER unstartedIdx (these may also be unplayed - extract team names anyway)
+         List<String> nextOpponents = new ArrayList<>();
+         for (int i = unstartedIdx + 1; i < Math.min(rows.size(), unstartedIdx + 4); i++) {
+             Element row  = rows.get(i);
+             String  home = extractCell(row, "td:nth-child(3)");
+             String  away = extractCell(row, "td:nth-child(7)");
+             if (home == null || away == null) continue;
+             // Try to figure out which side is "our" team
+             String norm = normalize(teamName);
+             String opp;
+             if (normalize(home).contains(norm) || norm.contains(normalize(home))) {
+                 opp = away;
+             } else if (normalize(away).contains(norm) || norm.contains(normalize(away))) {
+                 opp = home;
+             } else {
+                 // Fallback: pick whichever is non-empty
+                 opp = (!away.isEmpty()) ? away : home;
+             }
+             if (opp != null && !opp.isEmpty()) nextOpponents.add(opp);
+         }
 
-        // Target match teams
-        String targetHome = extractCell(rows.get(unstartedIdx), "td:nth-child(3)");
-        String targetAway = extractCell(rows.get(unstartedIdx), "td:nth-child(7)");
+         // Target match teams
+         String targetHome = extractCell(rows.get(unstartedIdx), "td:nth-child(3)");
+         String targetAway = extractCell(rows.get(unstartedIdx), "td:nth-child(7)");
 
-        log.info("Team {} ({}) | prev={} | target={} vs {} | next={}",
-                teamId, teamName, prevOpponents, targetHome, targetAway, nextOpponents);
+         log.info("Team {} ({}) | prev={} | target={} vs {} | next={}",
+                 teamId, teamName, prevOpponents, targetHome, targetAway, nextOpponents);
 
-        return new TeamNamePattern(teamId, teamName, prevOpponents, nextOpponents, targetHome, targetAway);
-    }
+         return new TeamNamePattern(teamId, teamName, prevOpponents, nextOpponents, targetHome, targetAway);
+     }
 
     /**
      * Step 2: Search a historical season for the same team-name sequence.
@@ -177,9 +180,14 @@ public class HttpTeamNamePatternFetcher {
             if (md != null) matches.add(md);
         }
 
+        if (matches.isEmpty()) {
+            return results;  // No matches in this season, return empty
+        }
+
         log.debug("Season {} – {} parsed matches for team {}", seasonYear, matches.size(), teamId);
 
         // For every match index i (potential "target"), check all combinations
+        int patternsFound = 0;
         for (int i = 0; i < matches.size(); i++) {
             MatchData target = matches.get(i);
 
@@ -210,6 +218,7 @@ public class HttpTeamNamePatternFetcher {
                             htFt,
                             pattern.targetHomeTeam, pattern.targetAwayTeam);
                     results.add(res);
+                    patternsFound++;
                     log.info("MATCH [{}] team={} season={} htFt={}", combo.label, pattern.teamName, seasonYear, htFt);
                 }
             }
@@ -428,6 +437,15 @@ public class HttpTeamNamePatternFetcher {
         HttpGet req = new HttpGet(url);
         req.addHeader("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0 Safari/537.36");
+
+        // Add request timeout config
+        RequestConfig config = RequestConfig.custom()
+                .setConnectTimeout(10000)      // 10 saniye connection timeout
+                .setConnectionRequestTimeout(10000)
+                .setSocketTimeout(15000)       // 15 saniye socket timeout
+                .build();
+        req.setConfig(config);
+
         log.debug("GET {}", url);
         try (CloseableHttpResponse resp = http.execute(req)) {
             int code = resp.getStatusLine().getStatusCode();
