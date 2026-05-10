@@ -20,30 +20,27 @@ public class ExcelReportService {
         altStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
         altStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
-        final int FIXED = 6;   // Date, Match ID, Home, Away, FT Score, HT Score
+        // Sabit sütun sayısı: FT Score, HT Score, Home, Away = 4
+        final int FIXED = 4;
 
-        // ------------------- 0. SATIR: Sabit başlıklar (ilk satır) -------------------
-        Row headerRow0 = sheet.createRow(0);
-        setCell(headerRow0, 0, "Date", hStyle);
-        setCell(headerRow0, 1, "Match ID", hStyle);
-        setCell(headerRow0, 2, "Home", hStyle);
-        setCell(headerRow0, 3, "Away", hStyle);
-        setCell(headerRow0, 4, "FT Score", hStyle);
-        setCell(headerRow0, 5, "HT Score", hStyle);
+        // ---------- 0. SATIR: Grup üst başlıkları (sadece oranlar için) ----------
+        Row groupRow = sheet.createRow(0);
+        // ---------- 1. SATIR: Alt başlıklar ----------
+        Row subRow = sheet.createRow(1);
 
-        // ------------------- 1. SATIR: Grup üst başlıkları -------------------
-        Row groupRow = sheet.createRow(1);
-        // ------------------- 2. SATIR: Alt başlıklar -------------------
-        Row subRow = sheet.createRow(2);
+        // YENİ SIRALAMA: FT Score (0), HT Score (1), Home (2), Away (3)
+        setCell(subRow, 0, "FT Score", hStyle);
+        setCell(subRow, 1, "HT Score", hStyle);
+        setCell(subRow, 2, "Home", hStyle);
+        setCell(subRow, 3, "Away", hStyle);
 
-        // Sütun genişlikleri (sabit)
-        sheet.setColumnWidth(0, 15 * 256);
-        sheet.setColumnWidth(1, 14 * 256);
+        // Sütun genişlikleri
+        sheet.setColumnWidth(0, 12 * 256);
+        sheet.setColumnWidth(1, 12 * 256);
         sheet.setColumnWidth(2, 20 * 256);
         sheet.setColumnWidth(3, 20 * 256);
-        sheet.setColumnWidth(4, 12 * 256);
-        sheet.setColumnWidth(5, 12 * 256);
 
+        // Oran sütunlarını yaz
         int col = FIXED;
         String currentGroup = null;
         int groupStartCol = FIXED;
@@ -51,10 +48,9 @@ public class ExcelReportService {
         for (ScraperConstants.ColumnDef def : ScraperConstants.COLUMN_DEFS) {
             sheet.setColumnWidth(col, 13 * 256);
 
-            // Grup değiştiyse önceki grubu birleştir
             if (!def.groupLabel.equals(currentGroup)) {
                 if (currentGroup != null && groupStartCol < col - 1) {
-                    sheet.addMergedRegion(new CellRangeAddress(1, 1, groupStartCol, col - 1));
+                    sheet.addMergedRegion(new CellRangeAddress(0, 0, groupStartCol, col - 1));
                 }
                 currentGroup = def.groupLabel;
                 groupStartCol = col;
@@ -64,18 +60,17 @@ public class ExcelReportService {
             setCell(subRow, col, def.subLabel, hStyle);
             col++;
         }
-        // Son grubu birleştir
         if (currentGroup != null && groupStartCol < col - 1) {
-            sheet.addMergedRegion(new CellRangeAddress(1, 1, groupStartCol, col - 1));
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, groupStartCol, col - 1));
         }
 
-        // ----- DÜZELTME: Sabit sütunlarda 0-2 satırlarını birleştirerek boşluk kalmamasını sağla -----
-        for (int i = 0; i < FIXED; i++) {
-            sheet.addMergedRegion(new CellRangeAddress(0, 2, i, i));
-        }
+        // Date sütunu en sona
+        int dateCol = col;
+        sheet.setColumnWidth(dateCol, 15 * 256);
+        setCell(subRow, dateCol, "Date", hStyle);
 
-        // ------------------- VERİ SATIRLARI -------------------
-        int rowNum = 3;   // veri satırı başlangıcı (0,1,2 başlık)
+        // ---------- VERİ SATIRLARI (2. satırdan başlar) ----------
+        int rowNum = 2;
         for (MatchData md : data) {
             if (md.oddsMap.isEmpty()) {
                 continue;
@@ -84,12 +79,11 @@ public class ExcelReportService {
             Row row = sheet.createRow(rowNum);
             CellStyle cs = (rowNum % 2 == 0) ? altStyle : null;
 
-            setCell(row, 0, md.date, cs);
-            setCell(row, 1, md.matchId, cs);
+            // Yeni sıralamaya göre verileri yaz
+            setCell(row, 0, md.ftScore, cs);
+            setCell(row, 1, md.htScore, cs);
             setCell(row, 2, md.homeTeam, cs);
             setCell(row, 3, md.awayTeam, cs);
-            setCell(row, 4, md.ftScore, cs);
-            setCell(row, 5, md.htScore, cs);
 
             int dcol = FIXED;
             for (ScraperConstants.ColumnDef def : ScraperConstants.COLUMN_DEFS) {
@@ -97,18 +91,19 @@ public class ExcelReportService {
                 setCell(row, dcol, val, cs);
                 dcol++;
             }
+
+            setCell(row, dateCol, md.date, cs);
             rowNum++;
         }
 
-        // Bölmeyi dondur (ilk 3 satır sabit)
-        sheet.createFreezePane(0, 3);
+        sheet.createFreezePane(0, 2);
 
         try (FileOutputStream fos = new FileOutputStream(filename)) {
             wb.write(fos);
         }
         wb.close();
 
-        AppLogger.log("Excel'e sadece oranları olan toplam " + (rowNum - 3) + " maç yazıldı.");
+        AppLogger.log("Excel'e sadece oranları olan toplam " + (rowNum - 2) + " maç yazıldı.");
     }
 
     static CellStyle makeStyle(Workbook wb, IndexedColors bg, IndexedColors fg, boolean bold) {
