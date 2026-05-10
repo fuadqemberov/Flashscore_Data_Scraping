@@ -8,9 +8,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 
-import static analyzer.flashscore.ScraperConstants.STATIC_COLUMN_KEYS;
-
 public class ExcelReportService {
+
     public static void generateReport(List<MatchData> data, String filename) throws IOException {
         Workbook wb = new XSSFWorkbook();
         Sheet sheet = wb.createSheet("Bet365 Odds");
@@ -21,62 +20,63 @@ public class ExcelReportService {
         altStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
         altStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
-        final int FIXED = 6;
+        final int FIXED = 6;   // Date, Match ID, Home, Away, FT Score, HT Score
 
-        Row grpRow = sheet.createRow(0);
-        setCell(grpRow, 0, "Date", hStyle);
+        // ------------------- 0. SATIR: Sabit başlıklar (ilk satır) -------------------
+        Row headerRow0 = sheet.createRow(0);
+        setCell(headerRow0, 0, "Date", hStyle);
+        setCell(headerRow0, 1, "Match ID", hStyle);
+        setCell(headerRow0, 2, "Home", hStyle);
+        setCell(headerRow0, 3, "Away", hStyle);
+        setCell(headerRow0, 4, "FT Score", hStyle);
+        setCell(headerRow0, 5, "HT Score", hStyle);
+
+        // ------------------- 1. SATIR: Grup üst başlıkları -------------------
+        Row groupRow = sheet.createRow(1);
+        // ------------------- 2. SATIR: Alt başlıklar -------------------
+        Row subRow = sheet.createRow(2);
+
+        // Sütun genişlikleri (sabit)
         sheet.setColumnWidth(0, 15 * 256);
-        setCell(grpRow, 1, "Match ID", hStyle);
         sheet.setColumnWidth(1, 14 * 256);
-        setCell(grpRow, 2, "Home", hStyle);
         sheet.setColumnWidth(2, 20 * 256);
-        setCell(grpRow, 3, "Away", hStyle);
         sheet.setColumnWidth(3, 20 * 256);
-        setCell(grpRow, 4, "FT Score", hStyle);
         sheet.setColumnWidth(4, 12 * 256);
-        setCell(grpRow, 5, "HT Score", hStyle);
         sheet.setColumnWidth(5, 12 * 256);
 
-        String lastGrp = "";
-        int grpStartCol = FIXED;
-        for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
-            String key = STATIC_COLUMN_KEYS.get(i);
-            String[] p = key.split("\\|");
-            String grp = p[0] + " | " + p[1];
-            int col = FIXED + i;
+        int col = FIXED;
+        String currentGroup = null;
+        int groupStartCol = FIXED;
+
+        for (ScraperConstants.ColumnDef def : ScraperConstants.COLUMN_DEFS) {
             sheet.setColumnWidth(col, 13 * 256);
 
-            if (!grp.equals(lastGrp)) {
-                if (!lastGrp.isEmpty() && grpStartCol < col - 1)
-                    sheet.addMergedRegion(new CellRangeAddress(0, 0, grpStartCol, col - 1));
-                setCell(grpRow, col, grp, tStyle);
-                lastGrp = grp;
-                grpStartCol = col;
+            // Grup değiştiyse önceki grubu birleştir
+            if (!def.groupLabel.equals(currentGroup)) {
+                if (currentGroup != null && groupStartCol < col - 1) {
+                    sheet.addMergedRegion(new CellRangeAddress(1, 1, groupStartCol, col - 1));
+                }
+                currentGroup = def.groupLabel;
+                groupStartCol = col;
             }
-        }
-        if (!lastGrp.isEmpty()) {
-            int lastDataCol = FIXED + STATIC_COLUMN_KEYS.size() - 1;
-            if (grpStartCol < lastDataCol) sheet.addMergedRegion(new CellRangeAddress(0, 0, grpStartCol, lastDataCol));
-        }
 
-        Row lblRow = sheet.createRow(1);
-        setCell(lblRow, 0, "Date", hStyle);
-        setCell(lblRow, 1, "Match ID", hStyle);
-        setCell(lblRow, 2, "Home", hStyle);
-        setCell(lblRow, 3, "Away", hStyle);
-        setCell(lblRow, 4, "FT Score", hStyle);
-        setCell(lblRow, 5, "HT Score", hStyle);
-
-        for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
-            String label = STATIC_COLUMN_KEYS.get(i).split("\\|")[2];
-            setCell(lblRow, FIXED + i, label, hStyle);
+            setCell(groupRow, col, def.groupLabel, tStyle);
+            setCell(subRow, col, def.subLabel, hStyle);
+            col++;
+        }
+        // Son grubu birleştir
+        if (currentGroup != null && groupStartCol < col - 1) {
+            sheet.addMergedRegion(new CellRangeAddress(1, 1, groupStartCol, col - 1));
         }
 
-        int rowNum = 2;
+        // ----- DÜZELTME: Sabit sütunlarda 0-2 satırlarını birleştirerek boşluk kalmamasını sağla -----
+        for (int i = 0; i < FIXED; i++) {
+            sheet.addMergedRegion(new CellRangeAddress(0, 2, i, i));
+        }
+
+        // ------------------- VERİ SATIRLARI -------------------
+        int rowNum = 3;   // veri satırı başlangıcı (0,1,2 başlık)
         for (MatchData md : data) {
-
-            // YENİ EKLENEN KOD: Eğer bu maçın Bet365 oranı yoksa (oddsMap boşsa),
-            // bu maçı Excel'e ekleme, direkt atla (skip).
             if (md.oddsMap.isEmpty()) {
                 continue;
             }
@@ -91,24 +91,24 @@ public class ExcelReportService {
             setCell(row, 4, md.ftScore, cs);
             setCell(row, 5, md.htScore, cs);
 
-            for (int i = 0; i < STATIC_COLUMN_KEYS.size(); i++) {
-                String val = md.oddsMap.getOrDefault(STATIC_COLUMN_KEYS.get(i), "-");
-                setCell(row, FIXED + i, val, cs);
+            int dcol = FIXED;
+            for (ScraperConstants.ColumnDef def : ScraperConstants.COLUMN_DEFS) {
+                String val = md.oddsMap.getOrDefault(def.dataKey, "-");
+                setCell(row, dcol, val, cs);
+                dcol++;
             }
             rowNum++;
         }
 
-        sheet.createFreezePane(0, 2);
+        // Bölmeyi dondur (ilk 3 satır sabit)
+        sheet.createFreezePane(0, 3);
+
         try (FileOutputStream fos = new FileOutputStream(filename)) {
             wb.write(fos);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
         }
         wb.close();
 
-        // Logda kaç tane maçın Excel'e başarıyla yazıldığını gösterecek.
-        // Örneğin: Tarama 130 maç buldu, ama Excel'e 45 maç yazıldı diyecek.
-        AppLogger.log("Excel'e sadece oranları olan toplam " + (rowNum - 2) + " maç yazıldı.");
+        AppLogger.log("Excel'e sadece oranları olan toplam " + (rowNum - 3) + " maç yazıldı.");
     }
 
     static CellStyle makeStyle(Workbook wb, IndexedColors bg, IndexedColors fg, boolean bold) {
