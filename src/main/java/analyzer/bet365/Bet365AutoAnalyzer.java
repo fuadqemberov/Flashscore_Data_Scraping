@@ -1,10 +1,6 @@
 package analyzer.bet365;
 
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserType;
-import com.microsoft.playwright.Locator;
-import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -15,18 +11,16 @@ import java.net.http.HttpResponse;
 import java.sql.*;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Bet365AutoAnalyzer {
 
-    // Kolon tanımları: SQL kolonu, görünen ad, Flashscore key
+    // ==================== KOLON TANIMLARI (GERÇEK SQL ADLARI) ====================
     static class ColumnDef {
         String sqlColumn;
         String displayName;
         String flashscoreKey;
+
         ColumnDef(String sqlColumn, String displayName, String flashscoreKey) {
             this.sqlColumn = sqlColumn;
             this.displayName = displayName;
@@ -34,27 +28,26 @@ public class Bet365AutoAnalyzer {
         }
     }
 
-    // Default filtre kolonları (başlangıçta kullanılan)
+    // Varsayılan filtre kolonları (7 adet, tekrar yok)
     private static final List<ColumnDef> DEFAULT_COLS = List.of(
-            new ColumnDef("iy_x_a", "İY X", "1x2|1st Half|Draw"),
-            new ColumnDef("bts_iiy_no_a", "2Y KG Hayır", "Both teams|2nd Half|No"),
-            new ColumnDef("bts_iy_no_a", "İY KG Hayır", "Both teams|1st Half|No"),
-            new ColumnDef("dc_ft_12_a", "ÇŞ 12", "Double chance|Full Time|12"),
-            new ColumnDef("au_1_5_over_a", "A/U 1.5 Üst", "Over/Under|Full Time|O 1.5"),
-            new ColumnDef("bts_ft_yes_a", "KG Evet", "Both teams|Full Time|Yes"),
-            new ColumnDef("iy_2_a", "İY 2", "1x2|1st Half|Away"),
-            new ColumnDef("dc_ft_12_a", "ÇŞ 12", "Double chance|Full Time|12")
+            new ColumnDef("first_x_a",       "İY X",           "1x2|1st Half|Draw"),
+            new ColumnDef("bts_second_no_a", "2Y KG Hayır",    "Both teams|2nd Half|No"),
+            new ColumnDef("bts_first_no_a",   "İY KG Hayır",     "Both teams|1st Half|No"),
+            new ColumnDef("dbc_ft_12_a",      "ÇŞ 12",          "Double chance|Full Time|12"),
+            new ColumnDef("ft_1_5_over_a",    "A/U 1.5 Üst",    "Over/Under|Full Time|O 1.5"),
+            new ColumnDef("bts_ft_yes_a",     "KG Evet",        "Both teams|Full Time|Yes"),
+            new ColumnDef("first_2_a",        "İY 2",           "1x2|1st Half|Away")
     );
 
-    // Ek daraltma kolonları (sırayla eklenir, sonuç çok kalırsa)
+    // Ek daraltma kolonları (sırayla dene, 2-5 aralığına düşene kadar ekle)
     private static final List<ColumnDef> EXTRA_COLS = List.of(
-            new ColumnDef("dc_ft_x2_a", "ÇŞ X2", "Double chance|Full Time|X2"),
-            new ColumnDef("dc_ft_1x_a", "ÇŞ 1X", "Double chance|Full Time|1X"),
-            new ColumnDef("iy_1_a", "İY 1", "1x2|1st Half|Home"),
-            new ColumnDef("iy_2_a", "İY 2", "1x2|1st Half|Away"),
-            new ColumnDef("ft_1_a", "MS 1", "1x2|Full Time|Home"),
-            new ColumnDef("ft_2_a", "MS 2", "1x2|Full Time|Away"),
-            new ColumnDef("au_4_5_under_a", "A/U 4.5 Alt", "Over/Under|Full Time|U 4.5")
+            new ColumnDef("dbc_ft_x2_a",      "ÇŞ X2",         "Double chance|Full Time|X2"),
+            new ColumnDef("dbc_ft_1x_a",      "ÇŞ 1X",         "Double chance|Full Time|1X"),
+            new ColumnDef("first_1_a",        "İY 1",          "1x2|1st Half|Home"),
+            new ColumnDef("first_2_a",        "İY 2",          "1x2|1st Half|Away"),
+            new ColumnDef("ft_1_a",           "MS 1",          "1x2|Full Time|Home"),
+            new ColumnDef("ft_2_a",           "MS 2",          "1x2|Full Time|Away"),
+            new ColumnDef("ft_4_5_under_a",   "A/U 4.5 Alt",   "Over/Under|Full Time|U 4.5")
     );
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
@@ -63,6 +56,7 @@ public class Bet365AutoAnalyzer {
     private Connection conn;
     private List<String> sqlColumns = new ArrayList<>();
 
+    // ==================== VERİ MODELLERİ ====================
     static class MatchInfo {
         String id, home, away, date;
         String ftScore = "-";
@@ -73,6 +67,7 @@ public class Bet365AutoAnalyzer {
         Map<String, String> data = new HashMap<>();
     }
 
+    // ==================== YAPILANDIRICI ====================
     public Bet365AutoAnalyzer() {
         try {
             Class.forName("org.postgresql.Driver");
@@ -107,12 +102,16 @@ public class Bet365AutoAnalyzer {
         System.out.println("🔍 Flashscore'dan bugünkü maçlar çekiliyor...\n");
 
         try (Playwright playwright = Playwright.create();
-             Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+             Browser browser = playwright.chromium().launch(
+                     new BrowserType.LaunchOptions().setHeadless(true));
              Page page = browser.newPage()) {
 
             page.navigate("https://www.flashscore.co.uk/football/");
-            try { page.locator("#onetrust-accept-btn-handler").click(new Locator.ClickOptions().setTimeout(3000)); } catch (Exception ignored) {}
-            page.waitForSelector("div[id^='g_1_'].event__match", new Page.WaitForSelectorOptions().setTimeout(15000));
+            // Çerez popup'ını kapatmayı dene
+            try { page.locator("#onetrust-accept-btn-handler")
+                    .click(new Locator.ClickOptions().setTimeout(3000)); } catch (Exception ignored) {}
+            page.waitForSelector("div[id^='g_1_'].event__match",
+                    new Page.WaitForSelectorOptions().setTimeout(15000));
 
             Locator rows = page.locator("div[id^='g_1_'].event__match");
             int count = rows.count();
@@ -125,11 +124,15 @@ public class Bet365AutoAnalyzer {
                     String home = row.locator(".event__homeParticipant").innerText().trim();
                     String away = row.locator(".event__awayParticipant").innerText().trim();
                     MatchInfo mi = new MatchInfo();
-                    mi.id = matchId; mi.home = home; mi.away = away; mi.date = LocalDate.now().toString();
+                    mi.id = matchId;
+                    mi.home = home;
+                    mi.away = away;
+                    mi.date = LocalDate.now().toString();
                     matches.add(mi);
                 } catch (Exception ignored) {}
             }
 
+            // Her maç için detayları çek
             for (MatchInfo mi : matches) fetchOddsForMatch(mi);
             System.out.println("✅ " + matches.size() + " maçın oranları çekildi.\n");
 
@@ -141,20 +144,30 @@ public class Bet365AutoAnalyzer {
     }
 
     private void fetchOddsForMatch(MatchInfo mi) {
+        // Skor çekme
         String scoreUrl = "https://5.flashscore.ninja/5/x/feed/df_sui_1_" + mi.id;
         try {
-            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(scoreUrl))
-                    .header("User-Agent", "Mozilla/5.0").header("x-fsign", "SW9D1eZo").GET().build();
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(scoreUrl))
+                    .header("User-Agent", "Mozilla/5.0")
+                    .header("x-fsign", "SW9D1eZo")
+                    .GET().build();
             HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() == 200) parseScores(mi, resp.body());
         } catch (Exception ignored) {}
 
-        String oddsUrl = String.format("https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=%s&projectId=5&geoIpCode=AZ&geoIpSubdivisionCode=AZBA", mi.id);
+        // Oran çekme
+        String oddsUrl = String.format(
+                "https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=%s&projectId=5&geoIpCode=AZ&geoIpSubdivisionCode=AZBA",
+                mi.id);
         try {
-            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(oddsUrl))
-                    .header("User-Agent", "Mozilla/5.0").GET().build();
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(oddsUrl))
+                    .header("User-Agent", "Mozilla/5.0")
+                    .GET().build();
             HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() == 200 && resp.body().startsWith("{")) parseOdds(mi, resp.body());
+            if (resp.statusCode() == 200 && resp.body().startsWith("{"))
+                parseOdds(mi, resp.body());
         } catch (Exception ignored) {}
     }
 
@@ -168,12 +181,17 @@ public class Bet365AutoAnalyzer {
                 else if (part.startsWith("IH÷")) ih = part.substring(3);
             }
             if (half == null || ig == null || ih == null) continue;
-            if ("1st Half".equals(half)) { htHome = ig; htAway = ih; }
-            else if ("2nd Half".equals(half)) {
+            if ("1st Half".equals(half)) {
+                htHome = ig;
+                htAway = ih;
+            } else if ("2nd Half".equals(half)) {
                 try {
                     ftHome = String.valueOf(Integer.parseInt(htHome) + Integer.parseInt(ig));
                     ftAway = String.valueOf(Integer.parseInt(htAway) + Integer.parseInt(ih));
-                } catch (NumberFormatException e) { ftHome = ig; ftAway = ih; }
+                } catch (NumberFormatException e) {
+                    ftHome = ig;
+                    ftAway = ih;
+                }
             }
         }
         mi.ftScore = ftHome + "-" + ftAway;
@@ -188,11 +206,13 @@ public class Bet365AutoAnalyzer {
         JSONArray oddsList = oddsData.optJSONArray("odds");
         if (oddsList == null) return;
 
+        // Ev / Deplasman katılımcı ID'leri (Home / Away ayrımı için)
         String homePartId = null, awayPartId = null;
         for (int i = 0; i < oddsList.length(); i++) {
             JSONObject entry = oddsList.getJSONObject(i);
             if (entry.getInt("bookmakerId") != 16) continue;
-            if ("HOME_DRAW_AWAY".equals(entry.getString("bettingType")) && "FULL_TIME".equals(entry.getString("bettingScope"))) {
+            if ("HOME_DRAW_AWAY".equals(entry.getString("bettingType"))
+                    && "FULL_TIME".equals(entry.getString("bettingScope"))) {
                 JSONArray items = entry.getJSONArray("odds");
                 for (int j = 0; j < items.length(); j++) {
                     JSONObject item = items.getJSONObject(j);
@@ -206,6 +226,7 @@ public class Bet365AutoAnalyzer {
             }
         }
 
+        // Tüm bahis tiplerini Map'e doldur (sadece bookmakerId=16)
         for (int i = 0; i < oddsList.length(); i++) {
             JSONObject entry = oddsList.getJSONObject(i);
             if (entry.getInt("bookmakerId") != 16) continue;
@@ -220,7 +241,8 @@ public class Bet365AutoAnalyzer {
                         for (int j = 0; j < items.length(); j++) {
                             JSONObject item = items.getJSONObject(j);
                             String val = getOddsValue(item);
-                            String pid = item.isNull("eventParticipantId") ? null : item.getString("eventParticipantId");
+                            String pid = item.isNull("eventParticipantId") ? null
+                                    : item.getString("eventParticipantId");
                             String key;
                             if (pid == null) key = "1x2|" + period + "|Draw";
                             else if (pid.equals(homePartId)) key = "1x2|" + period + "|Home";
@@ -229,16 +251,19 @@ public class Bet365AutoAnalyzer {
                         }
                     }
                     break;
+
                 case "BOTH_TEAMS_TO_SCORE":
                     period = mapScope(scope);
                     if (period != null) {
                         for (int j = 0; j < items.length(); j++) {
                             JSONObject item = items.getJSONObject(j);
                             boolean yes = item.getBoolean("bothTeamsToScore");
-                            mi.odds.put("Both teams|" + period + "|" + (yes ? "Yes" : "No"), getOddsValue(item));
+                            mi.odds.put("Both teams|" + period + "|" + (yes ? "Yes" : "No"),
+                                    getOddsValue(item));
                         }
                     }
                     break;
+
                 case "OVER_UNDER":
                     period = mapScope(scope);
                     if (period != null) {
@@ -247,18 +272,22 @@ public class Bet365AutoAnalyzer {
                             if (!item.isNull("handicap")) {
                                 double h = item.getJSONObject("handicap").getDouble("value");
                                 String sel = item.getString("selection");
-                                mi.odds.put("Over/Under|" + period + "|" + ("OVER".equals(sel) ? "O " : "U ") + h, getOddsValue(item));
+                                mi.odds.put("Over/Under|" + period + "|"
+                                                + ("OVER".equals(sel) ? "O " : "U ") + h,
+                                        getOddsValue(item));
                             }
                         }
                     }
                     break;
+
                 case "DOUBLE_CHANCE":
                     period = mapScope(scope);
                     if (period != null) {
                         for (int j = 0; j < items.length(); j++) {
                             JSONObject item = items.getJSONObject(j);
                             String val = getOddsValue(item);
-                            String pid = item.isNull("eventParticipantId") ? null : item.getString("eventParticipantId");
+                            String pid = item.isNull("eventParticipantId") ? null
+                                    : item.getString("eventParticipantId");
                             String key;
                             if (pid == null) key = "Double chance|" + period + "|12";
                             else if (pid.equals(homePartId)) key = "Double chance|" + period + "|1X";
@@ -267,6 +296,7 @@ public class Bet365AutoAnalyzer {
                         }
                     }
                     break;
+
                 case "CORRECT_SCORE":
                     period = mapScope(scope);
                     if (period != null && !"2nd Half".equals(period)) {
@@ -274,16 +304,19 @@ public class Bet365AutoAnalyzer {
                             JSONObject item = items.getJSONObject(j);
                             if (!item.isNull("score")) {
                                 String score = item.getString("score").replace(" ", "");
-                                mi.odds.put("Correct score|" + period + "|" + score, getOddsValue(item));
+                                mi.odds.put("Correct score|" + period + "|" + score,
+                                        getOddsValue(item));
                             }
                         }
                     }
                     break;
+
                 case "HALF_FULL_TIME":
                     for (int j = 0; j < items.length(); j++) {
                         JSONObject item = items.getJSONObject(j);
                         if (!item.isNull("winner")) {
-                            mi.odds.put("HTFT|" + item.getString("winner"), getOddsValue(item));
+                            mi.odds.put("HTFT|" + item.getString("winner"),
+                                    getOddsValue(item));
                         }
                     }
                     break;
@@ -308,7 +341,7 @@ public class Bet365AutoAnalyzer {
         return "-";
     }
 
-    // ==================== ANALİZ MOTORU ====================
+    // ==================== ANALİZ MOTORU (2-5 ARALIĞI) ====================
     private void analyzeMatch(MatchInfo match) {
         System.out.println("═══════════════════════════════════════════════════════════════");
         System.out.println("⚽ " + match.home + " vs " + match.away);
@@ -324,26 +357,45 @@ public class Bet365AutoAnalyzer {
         List<ColumnDef> activeFilters = new ArrayList<>(DEFAULT_COLS);
         List<MatchResult> results = querySQL(match, activeFilters);
 
-        System.out.println("🔍 AŞAMA 1: Default 8 kolon ile filtreleme");
+        System.out.println("🔍 AŞAMA 1: Default " + DEFAULT_COLS.size() + " kolon ile filtreleme");
         System.out.println("   Aktif filtreler: " + getFilterNames(activeFilters));
         System.out.println("   Sonuç: " + results.size() + " maç\n");
 
         int stage = 2;
         for (ColumnDef extraCol : EXTRA_COLS) {
-            if (results.size() <= 3) break;
+            if (results.size() >= 2 && results.size() <= 5) {
+                break; // Hedef aralıkta
+            }
 
-            boolean alreadyActive = activeFilters.stream().anyMatch(c -> c.sqlColumn.equals(extraCol.sqlColumn));
+            // Zaten eklenmiş mi?
+            boolean alreadyActive = activeFilters.stream()
+                    .anyMatch(c -> c.sqlColumn.equals(extraCol.sqlColumn));
             if (alreadyActive) continue;
 
+            // Geçerli değer var mı?
             String oddsValue = match.odds.getOrDefault(extraCol.flashscoreKey, "");
             if (oddsValue.isEmpty() || "-".equals(oddsValue)) continue;
 
+            // Geçici olarak ekleyip dene
             activeFilters.add(extraCol);
-            results = querySQL(match, activeFilters);
+            List<MatchResult> newResults = querySQL(match, activeFilters);
+
+            if (newResults.size() < 2) {
+                // Sonuç çok azaldı, bu filtre uygun değil, geri al
+                activeFilters.remove(activeFilters.size() - 1);
+                System.out.println("🔍 AŞAMA " + stage + ": +" + extraCol.displayName
+                        + " eklenseydi sonuç " + newResults.size() + " olacaktı → ATLANDI");
+                stage++;
+                continue;
+            }
+
+            // Kabul et, sonuçları güncelle
+            results = newResults;
 
             System.out.println("🔍 AŞAMA " + stage + ": +" + extraCol.displayName + " eklendi");
             System.out.println("   Aktif filtreler: " + getFilterNames(activeFilters));
             System.out.println("   Sonuç: " + results.size() + " maç\n");
+
             stage++;
         }
 
@@ -381,7 +433,8 @@ public class Bet365AutoAnalyzer {
         if (conditions.isEmpty()) return results;
 
         String whereClause = " WHERE " + String.join(" AND ", conditions);
-        String sql = "SELECT * FROM bet365_matches " + whereClause + " ORDER BY date_time DESC LIMIT 5000";
+        String sql = "SELECT * FROM bet365_matches " + whereClause
+                + " ORDER BY date_time DESC LIMIT 5000";
 
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             for (int i = 0; i < params.size(); i++) {
@@ -411,8 +464,9 @@ public class Bet365AutoAnalyzer {
             return;
         }
 
-        if (results.size() > 3) {
-            System.out.println("⚠️  SONUÇ: " + results.size() + " maç bulundu (hala çok fazla, daha fazla filtre gerekli)");
+        if (results.size() > 5) {
+            System.out.println("⚠️  SONUÇ: " + results.size()
+                    + " maç bulundu (hala çok fazla, daha fazla filtre gerekli)");
         } else {
             System.out.println("✅ SONUÇ: " + results.size() + " maç bulundu (hedef aralıkta!)");
         }
@@ -429,7 +483,8 @@ public class Bet365AutoAnalyzer {
             String away = truncate(r.data.getOrDefault("away_team", "-"), 8);
             String ft = truncate(r.data.getOrDefault("ft_ms", "-"), 8);
             String ht = truncate(r.data.getOrDefault("ht_iy", "-"), 8);
-            System.out.printf("│ %-4d │ %-19s │ %-19s │ %-8s │ %-8s │ %-8s │%n", (i+1), date, home, away, ft, ht);
+            System.out.printf("│ %-4d │ %-19s │ %-19s │ %-8s │ %-8s │ %-8s │%n",
+                    (i + 1), date, home, away, ft, ht);
         }
 
         if (results.size() > 20) {
@@ -450,7 +505,7 @@ public class Bet365AutoAnalyzer {
         return s;
     }
 
-    // ==================== MAIN ====================
+    // ==================== MAIN ÇALIŞTIRICI ====================
     public void run() {
         List<MatchInfo> todayMatches = scrapeTodayMatches();
 
