@@ -566,22 +566,44 @@ public class Bet365LiveFilterUI extends JFrame {
         return "-";
     }
 
-    private void fillOddsToInputs(MatchInfo selected) {
-        // Önce temizle
-        for (JTextField tf : valueFieldMap.values()) tf.setText("");
-        for (JCheckBox chk : checkBoxMap.values()) chk.setSelected(false);
+    // Default olarak işaretli olacak kolonlar
+    private static final List<String> DEFAULT_CHECKED_COLS = List.of(
+            "iy_x_a",       // İY X
+            "bts_iiy_no_a", // 2Y KG Hayır
+            "bts_iy_no_a",  // İY KG Hayır
+            "dc_ft_12_a",   // ÇŞ 12
+            "au_1_5_over_a", // A/U 1.5 Üst
+            "bts_ft_yes_a", // KG Evet
+            "iy_2_a",       // İY 2
+            "dc_ft_1x_a"    // ÇŞ 1X
+    );
 
-        // Flashscore'dan gelen oranları inputlara doldur
+    private void fillOddsToInputs(MatchInfo selected) {
+        // 1. Önce TÜM checkbox'ları false yap
+        for (JCheckBox chk : checkBoxMap.values()) {
+            chk.setSelected(false);
+        }
+        // 2. Tüm inputları temizle ve beyaz yap
+        for (JTextField tf : valueFieldMap.values()) {
+            tf.setText("");
+            tf.setBackground(Color.WHITE);
+        }
+
+        // 3. Default kolonları işaretle (değer olmasa bile)
+        for (String defaultCol : DEFAULT_CHECKED_COLS) {
+            JCheckBox chk = checkBoxMap.get(defaultCol);
+            if (chk != null) chk.setSelected(true);
+        }
+
+        // 4. Flashscore'dan gelen oranları inputlara doldur (ama checkbox'ları değiştirme!)
         for (ColumnDef col : ALL_COLUMNS) {
             String oddsValue = selected.odds.getOrDefault(col.flashscoreKey, "");
             if (!oddsValue.isEmpty() && !"-".equals(oddsValue)) {
                 JTextField tf = valueFieldMap.get(col.sqlColumn);
-                JCheckBox chk = checkBoxMap.get(col.sqlColumn);
                 if (tf != null) {
                     tf.setText(oddsValue);
                     tf.setBackground(new Color(220, 252, 231)); // yeşil vurgu
                 }
-                if (chk != null) chk.setSelected(true); // otomatik işaretle
             }
         }
     }
