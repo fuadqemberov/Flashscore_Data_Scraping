@@ -194,7 +194,7 @@ public class Bet365FullColumnFilter extends JFrame {
                 && !colName.equals("country_league") && !colName.equals("date_time");
     }
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
