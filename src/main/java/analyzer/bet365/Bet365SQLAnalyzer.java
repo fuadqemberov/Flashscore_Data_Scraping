@@ -594,7 +594,7 @@ public class Bet365SQLAnalyzer {
         System.out.println("   FT: " + target.getStr("ft_ms") + " | İY: " + target.getStr("ht_iy") + " | Tarih: " + target.getStr("date_time"));
         System.out.println("📊 Toplam SQL maç sayısı: " + (allSQLRecords.size() - 1) + "\n");
 
-        int RUNS = 100;
+        int RUNS = 200;
         List<String> allResults = new ArrayList<>();
         List<RunResult> successfulRuns = new ArrayList<>();
         List<String> oddsCols = ALL_ODDS_COLS.stream().map(c -> c.sqlColumn).collect(Collectors.toList());
