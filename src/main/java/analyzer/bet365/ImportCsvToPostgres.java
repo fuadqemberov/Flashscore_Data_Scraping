@@ -1,4 +1,4 @@
-package analyzer.extras;
+package analyzer.bet365;
 
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;

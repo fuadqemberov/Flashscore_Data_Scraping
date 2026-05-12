@@ -1,4 +1,4 @@
-package analyzer.extras;
+package analyzer.bet365;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
