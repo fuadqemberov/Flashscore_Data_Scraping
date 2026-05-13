@@ -10,7 +10,7 @@ import java.sql.*;
 import java.math.BigDecimal;
 
 public class ImportCsvToPostgres {
-    public static void main(String[] args) {
+    static void main(String[] args) {
         String url = "jdbc:postgresql://localhost:5432/postgres";
         String user = "postgres";
         String password = "fuad123";

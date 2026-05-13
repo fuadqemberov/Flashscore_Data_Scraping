@@ -187,10 +187,13 @@ public class FlashscoreApp extends Application {
 
                 runParallelScraping(pendingMatches);
 
-                AppLogger.log("\n=== FAZ 3: EXCEL RAPORU OLUŞTURULUYOR ===");
+                AppLogger.log("\n=== FAZ 3: EXCEL VE VERİTABANI İŞLEMLERİ ===");
+
                 ExcelReportService.generateReport(resultList, savePath);
 
-                AppLogger.log("İŞLEM TAMAMLANDI! → " + savePath);
+                DatabaseService.insertToDatabase(resultList);
+
+                AppLogger.log("İŞLEM TAMAMLANDI! Excel: " + savePath + " | Veritabanına aktarıldı.");
                 Platform.runLater(() -> {
                     statusLabel.setText("Tamamlandı!");
                     startBtn.setDisable(false);
