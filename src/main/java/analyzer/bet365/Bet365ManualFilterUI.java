@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-public class Bet365LiveFilterUI extends JFrame {
+public class Bet365ManualFilterUI extends JFrame {
 
     // ==================== KOLON TANIMLARI ====================
     static class ColumnDef {
@@ -204,7 +204,7 @@ public class Bet365LiveFilterUI extends JFrame {
         Map<String, String> odds = new HashMap<>();
     }
 
-    public Bet365LiveFilterUI() {
+    public Bet365ManualFilterUI() {
         setTitle("⚽ Bet365 Canlı Scraper → SQL Filtreleme");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1600, 1050);
@@ -704,6 +704,6 @@ public class Bet365LiveFilterUI extends JFrame {
         try {
             UIManager.setLookAndFeel(new NimbusLookAndFeel());
         } catch (Exception ignored) {}
-        SwingUtilities.invokeLater(Bet365LiveFilterUI::new);
+        SwingUtilities.invokeLater(Bet365ManualFilterUI::new);
     }
 }

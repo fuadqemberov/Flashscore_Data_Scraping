@@ -13,7 +13,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
 
-public class Bet365AutoAnalyzer {
+public class Bet365DailyAutoAnalyzer {
 
     // ==================== KOLON TANIMLARI (GERÇEK SQL ADLARI) ====================
     static class ColumnDef {
@@ -68,7 +68,7 @@ public class Bet365AutoAnalyzer {
     }
 
     // ==================== YAPILANDIRICI ====================
-    public Bet365AutoAnalyzer() {
+    public Bet365DailyAutoAnalyzer() {
         try {
             Class.forName("org.postgresql.Driver");
             conn = DriverManager.getConnection(
@@ -527,8 +527,8 @@ public class Bet365AutoAnalyzer {
         System.out.println("═══════════════════════════════════════════════════════════════");
     }
 
-    public static void main(String[] args) {
-        Bet365AutoAnalyzer analyzer = new Bet365AutoAnalyzer();
+    static void main(String[] args) {
+        Bet365DailyAutoAnalyzer analyzer = new Bet365DailyAutoAnalyzer();
         analyzer.run();
     }
 }
