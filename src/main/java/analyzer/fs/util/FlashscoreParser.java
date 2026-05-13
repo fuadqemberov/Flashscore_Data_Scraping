@@ -1,13 +1,20 @@
 package analyzer.fs.util;
 
 import analyzer.fs.MatchData;
-import analyzer.fs.model.*;
+import analyzer.fs.model.Country;
+import analyzer.fs.model.League;
+import analyzer.fs.model.Match;
+import analyzer.fs.model.Odds;
+import analyzer.fs.model.Season;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 

@@ -1,6 +1,8 @@
 package analyzer.fs;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class ScraperConstants {
     public static final int MAX_CONCURRENT_DRIVERS = 10;

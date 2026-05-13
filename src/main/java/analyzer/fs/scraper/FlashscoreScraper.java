@@ -1,13 +1,24 @@
 package analyzer.fs.scraper;
 
 
-import analyzer.fs.model.*;
+import analyzer.fs.model.Country;
+import analyzer.fs.model.League;
+import analyzer.fs.model.Match;
+import analyzer.fs.model.Odds;
+import analyzer.fs.model.ScrapeResult;
+import analyzer.fs.model.Season;
 import analyzer.fs.util.FlashscoreConfig;
 import analyzer.fs.util.FlashscoreParser;
 import analyzer.fs.util.ProgressBar;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class FlashscoreScraper implements AutoCloseable {
