@@ -188,6 +188,7 @@ public class Bet365FilterFinderSQL {
     }
 
     // ==================== ANA AV ====================
+    // ==================== ANA AV ====================
     public void startFilterHunt() {
         List<MatchRecord> valid = allRecords.stream().filter(m->m.ftHome>=0&&m.ftAway>=0).collect(Collectors.toList());
         if (valid.size()<10) { System.out.println("❌ Yetersiz maç."); return; }
@@ -260,19 +261,21 @@ public class Bet365FilterFinderSQL {
         }
 
         // Final özet
-        System.out.println("\n🏁 AV TAMAMLANDI. Altın filtre sayısı: "+survivors.size());
-        if (survivors.isEmpty()) {
-            System.out.println("❌ Hiçbiri 10 maçın tamamında başarılı olamadı.");
-        } else {
+        System.out.println("\n🏁 AV TAMAMLANDI. Kalan filtre sayısı: " + survivors.size());
+        if (survivors.size() == 1 || survivors.size() == 2) {
+            // 🟢 BAŞARILI: 1 veya 2 filtre kaldı
             System.out.println("✨ ALTIN FİLTRELER ve tüm hedeflerdeki eşleşmeleri:");
-            for (int i=0; i<survivors.size(); i++) {
+            for (int i = 0; i < survivors.size(); i++) {
                 Filter f = survivors.get(i);
-                System.out.println("\n🔸 Altın Filtre #"+(i+1)+": " + f.getColumnNames());
+                System.out.println("\n🔸 Altın Filtre #" + (i + 1) + ": " + f.getColumnNames());
                 for (MatchRecord tgt : targets) {
                     System.out.println("   Hedef: " + tgt.fullDetail());
                     printPoolForFilter(f, tgt);
                 }
             }
+        } else {
+            // 🔴 BAŞARISIZ: 0 veya 2'den fazla filtre kaldı
+            System.out.println("❌ Altın filtre bulunamadı (başarısız).");
         }
     }
 
