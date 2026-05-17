@@ -139,27 +139,6 @@ public class Bet365DailyAutoAnalyzer {
         }
     }
 
-    // ---------- YENİ SABİT FİLTRE DESENLERİ ----------
-    private static final List<String> PATTERN_2 = List.of(
-            "MS Skor 0:3", "MS 2", "İY Skor 2:1", "İY Skor 1:0", "MS Skor 4:2",
-            "MS Skor 0:2", "İY 2", "İY Skor 3:1", "MS Skor 4:3", "HT/FT 2/2",
-            "İY A/U 2.5 Üst", "İY ÇŞ X2", "İY A/U 0.5 Alt"
-    );
-
-    private static final List<String> PATTERN_3 = List.of(
-            "A/U 1.5 Alt", "MS Skor 1:0", "A/U 1.5 Üst", "2Y 2", "İY Skor 2:0",
-            "2Y 1", "HT/FT 1/1", "İY A/U 2.5 Üst", "MS Skor 2:2", "2Y A/U 1.5 Üst",
-            "İY ÇŞ 12", "İY Skor 1:1", "İY Skor 0:3", "MS Skor 1:4", "KG Hayır",
-            "İY A/U 0.5 Üst", "İY Skor 1:0", "ÇŞ 1X", "A/U 0.5 Üst", "A/U 3.5 Alt",
-            "İY Skor 1:3", "HT/FT X/X"
-    );
-
-    private static final List<String> PATTERN_4 = List.of(
-            "İY KG Hayır", "MS Skor 4:1", "2Y A/U 2.5 Üst", "MS Skor 0:3", "HT/FT 2/2",
-            "2Y KG Hayır", "İY KG Evet", "HT/FT X/2", "A/U 2.5 Üst", "İY Skor 3:0",
-            "HT/FT 1/1", "A/U 0.5 Alt"
-    );
-
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15)).build();
 
@@ -689,12 +668,7 @@ public class Bet365DailyAutoAnalyzer {
             System.out.println("\n\n⚽ " + match.home + " vs " + match.away);
             // Yöntem 1: Adaptif
             analyzeMatchAdaptive(match);
-            // Yöntem 2: Sabit Desen 1
-            analyzeWithSequentialPattern(match, PATTERN_2, "🔵 YÖNTEM 2: Sabit Filtre Deseni 1");
-            // Yöntem 3: Sabit Desen 2
-            analyzeWithSequentialPattern(match, PATTERN_3, "🔵 YÖNTEM 3: Sabit Filtre Deseni 2");
-            // Yöntem 4: Sabit Desen 3
-            analyzeWithSequentialPattern(match, PATTERN_4, "🔵 YÖNTEM 4: Sabit Filtre Deseni 3");
+
         }
 
         System.out.println("═══════════════════════════════════════════════════════════════");
@@ -706,4 +680,7 @@ public class Bet365DailyAutoAnalyzer {
         Bet365DailyAutoAnalyzer analyzer = new Bet365DailyAutoAnalyzer();
         analyzer.run();
     }
+
+
+
 }
